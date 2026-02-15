@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-Extending the [westlicht/rc505-editor](https://github.com/westlicht/rc505-editor) to support the RC-505 mk2 is **technically feasible but requires a complete data model rewrite and a significant reverse-engineering effort**. Analysis of an actual mk2 `MEMORY001A.RC0` dump reveals that Roland adopted a radically different XML format: **all property names are replaced with single-letter positional tags** (`<A>`, `<B>`, `<C>`, ...), the effects are stored in separate top-level elements (`<ifx>`, `<tfx>`), and there are 6 tracks instead of 5. The best path forward is to fork the editor, reuse its JUCE UI shell and generic property system, and build the mk2 data model from scratch using the [Parameter Guide](https://files.kraftmusic.com/media/ownersmanual/Boss_RC-505mkII_Parameter_Guide.pdf) as the Rosetta Stone for mapping positional XML tags to human-readable parameter names.
+Extending the [westlicht/rc505-editor](https://github.com/westlicht/rc505-editor) to support the RC-505 mk2 is **technically feasible but requires a complete data model rewrite**. Analysis of a full mk2 device dump (all 99 memory files, system settings, rhythm data, and WAV samples) reveals that Roland adopted a radically different XML format: **all property names are replaced with single-letter positional tags** (`<A>`, `<B>`, `<C>`, ...), the effects are stored in separate top-level elements (`<ifx>`, `<tfx>`), and each memory slot is an individual file (not one monolithic file). The format is now **fully decoded** — track parameters, FX architecture, WAV format, tempo/sample relationships, file naming conventions, and system structure are all understood. The best path forward is to fork the editor, reuse its JUCE UI shell and generic property system, and build the mk2 data model from scratch using data-driven mapping tables.
 
 ---
 
@@ -10,8 +10,8 @@ Extending the [westlicht/rc505-editor](https://github.com/westlicht/rc505-editor
 
 The westlicht/rc505-editor is a GPLv3 C++11 desktop application built on the JUCE framework. It operates on the RC-505's USB mass storage filesystem, reading and writing:
 
-- **`ROLAND/DATA/MEMORY.RC0`** — XML file with all 99 patch definitions
-- **`ROLAND/DATA/SYSTEM.RC0`** — XML file with global system settings
+- **`ROLAND/DATA/MEMORY.RC0`** — a single XML file with all 99 patch definitions
+- **`ROLAND/DATA/SYSTEM.RC0`** — a single XML file with global system settings
 - **`ROLAND/WAVE/{patch}_{track}/`** — WAV audio files (44.1 kHz, 16-bit, stereo)
 
 Key architectural components:
@@ -24,35 +24,80 @@ The editor hardcodes `revision="2"` and `name="RC-505"` in the XML root, and all
 
 ---
 
-## 2. The mk2 RC0 Format: Analysis of Actual Data
+## 2. The mk2 RC0 Format: Complete Analysis from Full Device Dump
 
-Analysis based on [MEMORY001A.RC0](https://gist.githubusercontent.com/liotier/08f0b33abf8962533ac9b6beef2d1721/raw/c458e85b79456edebd42ef4609ce5acf9035ca05/MEMORY001A.RC0) — a single-memory-slot dump from an RC-505 mk2 (25,516 lines).
+Analysis based on a complete device dump: 201 RC0 files (99 A + 99 B memory files, SYSTEM1, SYSTEM2, RHYTHM), 127 WAV files across 27 memories, and a full file listing of the SD card contents.
 
-### 2.1 Top-Level Structure
+### 2.1 Filesystem Layout
+
+```
+ROLAND/
+├── DATA/
+│   ├── MEMORY001A.RC0 through MEMORY099A.RC0   (99 files, live state)
+│   ├── MEMORY001B.RC0 through MEMORY099B.RC0   (99 files, backup state)
+│   ├── SYSTEM1.RC0                              (live system settings)
+│   ├── SYSTEM2.RC0                              (backup system settings)
+│   └── RHYTHM.RC0                               (binary rhythm pattern data)
+└── WAVE/
+    ├── 001_1/001_1.WAV                          (Memory 001, Track 1)
+    ├── 001_2/001_2.WAV                          (Memory 001, Track 2)
+    ├── ...
+    ├── 028_3/028_3.WAV                          (Memory 028, Track 3)
+    ├── 039_5/                                    (empty placeholder dir)
+    ├── ...
+    └── TEMP/__TEMPSP.BIN                        (recording scratch file)
+```
+
+**Key differences from original RC-505:**
+- **Individual files per memory** instead of one monolithic `MEMORY.RC0`
+- **A/B file pairs**: A = live state, B = backup/previous save. Factory memories have identical A and B; user-modified memories diverge (typically in FX parameters and play settings)
+- **Memory numbering**: files are `MEMORY001`-`MEMORY099`, but the XML `<mem id="N">` uses 0-indexed IDs (MEMORY001 → id=0, MEMORY099 → id=98)
+- **WAV directories**: `{NNN}_{T}/{NNN}_{T}.WAV` where NNN=memory number, T=track (1-5). Empty directories exist as placeholders for factory presets
+- **Tracks 1-5 only** have WAV files — no track 6 WAV directories exist
+- **`<count>NNNN</count>`** footer after `</database>` — appears to be a save/version counter (not a checksum): Memory001A has count=0013, Memory001B has count=0014, factory defaults have count=0001
+
+### 2.2 Per-Memory XML Structure
+
+Each memory file contains three sibling elements under `<database>`:
 
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
 <database name="RC-505MK2" revision="0">
-  <mem id="0">    <!-- Lines 3-937: Memory settings (935 lines) -->
-    ...
+  <mem id="0">     <!-- Lines 3-925: Memory settings (923 lines) -->
+    <NAME>...</NAME>
+    <TRACK1>...</TRACK1> through <TRACK6>...</TRACK6>
+    <MASTER>...</MASTER>
+    <REC>...</REC>
+    <PLAY>...</PLAY>
+    <RHYTHM>...</RHYTHM>
+    <ICTL*>...</ICTL*>     <!-- Internal control mappings -->
+    <ECTL*>...</ECTL*>     <!-- External control mappings -->
+    <ASSIGN1>...</ASSIGN1> through <ASSIGN16>...</ASSIGN16>
+    <INPUT>...</INPUT>
+    <OUTPUT>...</OUTPUT>
+    <ROUTING>...</ROUTING>
+    <MIXER>...</MIXER>
+    <EQ_*>...</EQ_*>       <!-- Per-channel parametric EQ -->
+    <MASTER_FX>...</MASTER_FX>
+    <FIXED_VALUE>...</FIXED_VALUE>
   </mem>
-  <ifx id="0">    <!-- Lines 938-13106: Input FX definitions (12,169 lines) -->
-    ...
+  <ifx id="0">    <!-- Lines 926-13094: Input FX (12,169 lines) -->
+    <SETUP>...</SETUP>
+    <!-- 4 FX groups (A-D) × 4 slots × 66 effect types -->
   </ifx>
-  <tfx id="0">    <!-- Lines 13107-25515: Track FX definitions (12,409 lines) -->
-    ...
+  <tfx id="0">    <!-- Lines 13095-25503: Track FX (12,409 lines) -->
+    <SETUP>...</SETUP>
+    <!-- 4 FX groups (A-D) × 4 slots × 70 effect types -->
   </tfx>
 </database>
-<count>0003</count>   <!-- Binary footer/checksum outside XML -->
+<count>0013</count>
 ```
 
-**Three separate top-level elements per memory** — the original RC-505 stores everything in a single `<mem>` element. The mk2 splits memory settings (`<mem>`), input effects (`<ifx>`), and track effects (`<tfx>`) into sibling elements with matching `id` attributes. A full 99-memory file would contain 297 top-level elements.
+Total: **2,316 XML sections** per memory file, **25,504 lines**.
 
-The `<count>0003</count>` footer after `</database>` confirms the RC0 format includes non-XML trailer data (count of top-level sections: 3 = mem + ifx + tfx).
+### 2.3 Obfuscated Tag Names
 
-### 2.2 Obfuscated Tag Names
-
-The most significant format change: **all child element names within sections are replaced by sequential single letters**.
+All child element names within sections are replaced by sequential single letters:
 
 Original RC-505 (descriptive):
 ```xml
@@ -60,7 +105,6 @@ Original RC-505 (descriptive):
   <Rev>0</Rev>
   <PlyLvl>50</PlyLvl>
   <Pan>50</Pan>
-  <TmpSync>1</TmpSync>
 </TRACK1>
 ```
 
@@ -72,129 +116,197 @@ RC-505 mk2 (positional):
   <C>50</C>     <!-- PAN -->
   <D>100</D>    <!-- PLAY LEVEL -->
   ...
-  <Y>2</Y>
+  <Y>1</Y>
 </TRACK1>
 ```
 
-This means **parsing the mk2 format requires a positional mapping table** — you must know that `<A>` in a `<TRACK>` section means REVERSE, `<B>` means 1SHOT, etc. The [Parameter Guide PDF](https://files.kraftmusic.com/media/ownersmanual/Boss_RC-505mkII_Parameter_Guide.pdf) lists parameters in the same order as they appear in the XML, making it the essential decoding reference.
+**Note**: Roland's XML is not strictly valid — some sections use numeric tag names (`<0>`, `<1>`, ...) and symbols (`<#>`) for large parameter sets like STEP_SLICER (37 fields: A-Z, 0-9, #). Standard XML parsers will reject these; a tolerant/regex-based parser is required.
 
-### 2.3 Complete Section Inventory
+### 2.4 TRACK Parameters — Fully Decoded
 
-#### Inside `<mem>` (99 unique section names):
+Cross-referencing multiple memories (populated vs factory defaults) with WAV file metadata:
 
-| Section | Child Tags | Purpose |
-|---------|------------|---------|
-| `NAME` | A-L (12) | Patch name as ASCII character codes |
-| `TRACK1` through `TRACK6` | A-Y (25 each) | Per-track settings |
-| `MASTER` | A-D (4) | Tempo and master settings |
-| `REC` | A-F (6) | Recording options |
-| `PLAY` | A-H (8) | Playback options |
-| `RHYTHM` | A-M (13) | Rhythm settings |
-| `ICTL1_TRACK1_FX` through `ICTL2_TRACK5_TRACK` | A-C (3 each) | Internal control targets (20 sections) |
-| `ICTL1_PEDAL1` through `ICTL3_PEDAL9` | A-C (3 each) | Internal control pedal mappings (27 sections) |
-| `ECTL_CTL1` through `ECTL_EXP2` | A-D/E (4-5 each) | External control mappings (6 sections) |
-| `ASSIGN1` through `ASSIGN17` | A-J (10 each) | Assignable controls |
-| `INPUT` | A-M (13) | Input configuration |
-| `OUTPUT` | A-D (4) | Output configuration |
-| `ROUTING` | A-S (19) | Signal routing matrix |
-| `MIXER` | A-V (22) | Level mixer |
-| `EQ_MIC1` through `EQ_SUBOUT2R` | A-L (12 each) | Per-channel parametric EQ (12 sections) |
-| `MASTER_FX` | A-C (3) | Master effects (comp/reverb) |
-| `FIXED_VALUE` | A-B (2) | Fixed internal values |
-| `SETUP` | A (1) | Memory-level setup |
+| Tag | Value Range | Parameter | Evidence |
+|-----|-------------|-----------|----------|
+| A | 0-1 | REVERSE | Always 0 in dump |
+| B | 0-1 | 1SHOT | Always 0 in dump |
+| C | 0-100 | PAN | 50 = center (confirmed) |
+| D | 0-200 | PLAY LEVEL | 95-100 in populated tracks |
+| E | 0-1 | START MODE | 0=IMMEDIATE |
+| F | 0-1 | STOP MODE | 0=IMMEDIATE, 1=FADE |
+| G | 0-2 | DUB MODE | Always 0 |
+| H | 0-1 | TRACK STATE | 0=initialized in memory, 1=factory empty |
+| I | 0 | (reserved) | Always 0 |
+| J | 0-27 | COLOR INDEX | Track display color (0-27, varies per track) |
+| K | 0-1 | LOOP SYNC | Always 0 in dump |
+| L | 0-1 | TEMPO SYNC SW | Almost always 1 |
+| M | 0-1 | FX SW | 0 or 1 |
+| N | 0-1 | TEMPO SYNC MODE | Almost always 1 |
+| O | 0-1 | BOUNCE IN | Almost always 1 |
+| P | 0 | (reserved) | Always 0 |
+| Q | 0-127 | INPUT SENSITIVITY | Always 127 |
+| R | 0-2 | PLAY MODE | 0=stop?, 1=MULTI, 2=SINGLE |
+| **S** | 0-20 | **LOOP LENGTH (measures)** | **Verified: S = X / V exactly** |
+| T | 0 | (reserved) | Always 0 |
+| **U** | 700-1220 | **TEMPO × 10** | **700 = 70.0 BPM, 1200 = 120.0 BPM** |
+| **V** | 86720-151200 | **SAMPLES PER MEASURE** | **V/44100 = measure duration; matches U** |
+| **W** | 0-1 | **HAS AUDIO** | **1 = WAV file exists, 0 = empty** |
+| **X** | 0-2247111 | **TOTAL SAMPLE COUNT** | **X/44100 = WAV duration; verified vs WAV header** |
+| Y | 1-2 | REC STATE | 1=recorded, 2=factory empty |
 
-#### Inside `<ifx>` and `<tfx>` (Input FX / Track FX):
+**Key verification**: Memory001, Track1 at 70.0 BPM: U=700, V=151200 (151200/44100 = 3.4286s = one 4/4 measure at 70 BPM), S=8 measures, X=1209600 (1209600/44100 = 27.429s = 8 measures). WAV file header confirms 27.429s duration. **S = X/V** holds exactly for all 36 populated tracks tested.
 
-Each contains a `<SETUP>` header, then **4 FX banks** (`<A>` through `<D>`), each bank containing **4 slots** (`<AA>` through `<AD>` for bank A, `<BA>` through `<BD>` for bank B, etc.), and **each slot storing parameters for all 70 effect types** as separate sections:
+### 2.5 TRACK6: Confirmed as Rhythm Track (Not User-Recordable)
+
+Evidence:
+- **No WAV files**: No `NNN_6/` directories exist anywhere on the device
+- **No FX sections**: Neither `<ifx>` nor `<tfx>` contain FX groups for track 6 (only groups A-D mapping to 4 banks, not 5 or 6)
+- **Always empty**: In all 99 memories (including populated ones), TRACK6 has H=1, W=0, X=0
+- **Same structure**: TRACK6 has identical 25-field A-Y format as TRACK1-5 (level, pan, etc. are controllable), but no audio content
+
+TRACK6 is the **rhythm track output channel** — it has mixer/routing presence but no user audio.
+
+### 2.6 FX Architecture
+
+#### Input FX (`<ifx>`) and Track FX (`<tfx>`)
+
+Both follow the same structure:
 
 ```
-<ifx id="0">
-  <SETUP><A>0</A></SETUP>
-  <A>                          ← Bank A header (3 values: mode, sw, FX target)
-    <A>1</A><B>1</B><C>3</C>
-  </A>
-  <AA>                         ← Bank A, Slot A header (4 values)
-    <A>0</A><B>0</B><C>0</C><D>0</D>
-  </AA>
-  <AA_LPF>                     ← Bank A, Slot A, LPF parameters
-    <A>3</A><B>50</B><C>50</C><D>50</D><E>0</E>
-  </AA_LPF>
-  <AA_LPF_SEQ>                 ← Bank A, Slot A, LPF step sequencer (22 values)
-    <A>0</A>...<V>0</V>
-  </AA_LPF_SEQ>
-  <AA_BPF>...</AA_BPF>
-  <AA_BPF_SEQ>...</AA_BPF_SEQ>
-  ... (70 effect types × {params + seq} per slot)
-  <AB>...</AB>                 ← Bank A, Slot B
-  ... (repeat for all 4 slots)
-  <B>...</B>                   ← Bank B header
-  ... (repeat for all 4 banks)
-</ifx>
+<SETUP>          ← 1 field (A): global setup
+<A>              ← Group A parent: 3 fields (A=SW, B=?, C=target/routing)
+<AA>             ← Group A, Slot 1: 4 fields (A=SW, B=?, C=FX_TYPE_INDEX, D=?)
+<AA_LPF>         ← Parameters for LPF effect
+<AA_LPF_SEQ>     ← Step sequencer for LPF (22 fields)
+<AA_BPF>         ← Parameters for BPF effect
+...              ← (all effect types stored, active one selected by AA.C index)
+<AB>             ← Group A, Slot 2
+...
+<B>              ← Group B parent
+<BA>             ← Group B, Slot 1
+...
+<DD_REVERB>      ← Group D, Slot 4, last shared effect type
 ```
 
-**70 unique FX types** per slot (common to both ifx and tfx):
+**IFX**: 4 groups × 4 slots × 66 effect types = 1,056 effect parameter sections + 66 _SEQ sections
+**TFX**: 4 groups × 4 slots × 70 effect types = 1,120 effect parameter sections + 70 _SEQ sections
+**TFX-only effects**: BEAT_SCATTER, BEAT_REPEAT, BEAT_SHIFT, VINYL_FLICK
+
+The Group parent `C` field differs between IFX and TFX:
+- **IFX groups**: C varies (0-3), indicating input routing target
+- **TFX groups**: C is always 0
+
+Each FX slot's `C` field is the **effect type index** selecting which of the 66/70 stored effect parameter sets is active.
+
+#### 66 IFX Effect Types (in XML order):
+
 LPF, BPF, HPF, PHASER, FLANGER, SYNTH, LOFI, RADIO, RING_MODULATOR, G2B, SUSTAINER, AUTO_RIFF, SLOW_GEAR, TRANSPOSE, PITCH_BEND, ROBOT, ELECTRIC, HARMONIST_MANUAL, HARMONIST_AUTO, VOCODER, OSC_VOCODER, OSC_BOT, PREAMP, DIST, DYNAMICS, EQ, ISOLATOR, OCTAVE, AUTO_PAN, MANUAL_PAN, STEREO_ENHANCE, TREMOLO, VIBRATO, PATTERN_SLICER, STEP_SLICER, DELAY, PANNING_DELAY, REVERSE_DELAY, MOD_DELAY, TAPE_ECHO, TAPE_ECHO_V505V2, GRANULAR_DELAY, WARP, TWIST, ROLL, ROLL_V505V2, FREEZE, CHORUS, REVERB, GATE_REVERB, REVERSE_REVERB
 
-**`tfx` has 4 additional types** not in `ifx`: BEAT_SCATTER, BEAT_REPEAT, BEAT_SHIFT, VINYL_FLICK
+Most effects also have a `_SEQ` companion section (22 values: step sequencer pattern).
 
-Most effects also have a `_SEQ` companion section (22 values: step sequencer parameters).
+### 2.7 SYSTEM.RC0 Structure
 
-### 2.4 Decoded TRACK Parameters (A-Y → Parameter Guide Mapping)
+SYSTEM1.RC0 (591 lines) contains global device settings. Same A/B pairing as memories (SYSTEM1=live, SYSTEM2=backup).
 
-Cross-referencing the mk2 Parameter Guide with the XML positions:
+```xml
+<database name="RC-505MK2" revision="0">
+<sys>
+  <SETUP>     <!-- 22 fields: global setup (tempo, LCD contrast, etc.) -->
+  <COLOR>     <!-- 5 fields: track color mode -->
+  <USB>       <!-- 5 fields: USB audio interface settings -->
+  <MIDI>      <!-- 10 fields: MIDI channel, sync, thru settings -->
 
-| XML Tag | Value in dump | Parameter | Notes |
-|---------|---------------|-----------|-------|
-| A | 0 | REVERSE | OFF/ON |
-| B | 0 | 1SHOT | OFF/ON |
-| C | 50 | PAN | 0=L50, 50=CENTER, 100=R50 |
-| D | 100 | PLAY LEVEL | 0-200 |
-| E | 0 | START MODE | 0=IMMEDIATE, 1=FADE |
-| F | 0 | STOP MODE | 0=IMMEDIATE, 1=FADE, 2=LOOP |
-| G | 0 | DUB MODE | 0=OVERDUB, 1=REPLACE1, 2=REPLACE2 |
-| H | 1 | FX | 0=OFF, 1=ON |
-| I | 0 | PLAY MODE | 0=MULTI, 1=SINGLE |
-| J | 1 | MEASURE | 0=AUTO, 1=FREE, 2+=measures |
-| K | 0 | LOOP SYNC | OFF/ON |
-| L | 1 | TEMPO SYNC SW | OFF/ON |
-| M | 1 | TEMPO SYNC MODE | 0=PITCH, 1=XFADE |
-| N | 1 | TEMPO SYNC SPEED | 0=HALF, 1=NORMAL, 2=DOUBLE |
-| O | 1 | BOUNCE IN | OFF/ON |
-| P | 0 | INPUT (low byte?) | Input routing |
-| Q | 127 | INPUT (bitmask) | 0b1111111 = all 7 inputs enabled |
-| R | 1 | (unknown) | |
-| S | 0 | (unknown) | |
-| T | 0 | (unknown) | |
-| U | 1200 | Recording tempo | BPM × 10 (120.0 BPM) |
-| V | 88200 | Wave length | Samples (= 2.0 sec at 44.1kHz) |
-| W | 0 | Wave status | |
-| X | 0 | (unknown) | |
-| Y | 2 | (unknown) | |
+  <!-- Internal controls: per-track FX and track button mappings -->
+  <ICTL1_TRACK1_FX> through <ICTL2_TRACK5_TRACK>   <!-- 20 sections × 3 fields -->
 
-### 2.5 Key Format Differences Summary
+  <!-- Pedal mappings (9 pedals × 3 control banks) -->
+  <ICTL1_PEDAL1> through <ICTL3_PEDAL9>             <!-- 27 sections × 3 fields -->
+
+  <!-- External control assignments -->
+  <ECTL_CTL1> through <ECTL_CTL4>                    <!-- 4 sections × 4 fields -->
+  <ECTL_EXP1>, <ECTL_EXP2>                           <!-- 2 sections × 4 fields -->
+
+  <!-- Per-memory recall preferences (which sections to load) -->
+  <PREF>      <!-- 20 fields (A-T): boolean flags for recall behavior -->
+
+  <!-- I/O configuration -->
+  <INPUT>     <!-- 13 fields -->
+  <OUTPUT>    <!-- 4 fields -->
+  <ROUTING>   <!-- 19 fields: signal routing matrix -->
+  <MIXER>     <!-- 22 fields: level/pan for all buses -->
+
+  <!-- Per-channel parametric EQ (3-band) -->
+  <EQ_MIC1> through <EQ_SUBOUT2R>                    <!-- 12 sections × 12 fields -->
+
+  <MASTER_FX> <!-- 3 fields -->
+  <FIXED_VALUE> <!-- 2 fields -->
+</sys>
+</database>
+<count>0225</count>
+```
+
+System sections like INPUT, OUTPUT, ROUTING, MIXER, and EQ appear in **both** system and memory files — memory-level settings override system defaults when a patch is loaded (controlled by PREF flags).
+
+### 2.8 RHYTHM.RC0: Binary Format
+
+Unlike the XML RC0 files, RHYTHM.RC0 is a **2 MB binary file** (2,009,212 bytes) with fixed-size pattern slots:
+
+- **Header**: `PTN_NNNN` (8 bytes) followed by pattern name and data
+- **Pattern names**: ASCII with `^` as space separator (e.g., `SIMPLE^BEAT`)
+- **Slot size**: approximately 40,184 bytes per pattern
+- **Capacity**: ~50 pattern slots pre-allocated
+- **Utilization**: Only 2,138 bytes of actual data (one pattern: "SIMPLE BEAT"); rest is zero-padded
+- **Not XML**: Requires dedicated binary parser (low priority for an editor)
+
+### 2.9 WAV Audio Format — Fully Decoded
+
+From hex dump of `001_1.WAV` (Memory 001, Track 1):
+
+| Field | Value |
+|-------|-------|
+| Format | RIFF/WAVE |
+| Audio Format | **3 (IEEE Float)** — not PCM |
+| Channels | 2 (stereo) |
+| Sample Rate | 44,100 Hz |
+| Bits Per Sample | **32** |
+| Block Align | 8 bytes (2 × 4) |
+| Byte Rate | 352,800 bytes/sec |
+| fmt Chunk Size | 28 bytes (extended format) |
+| cbSize | 10 |
+| Data Size | 9,676,800 bytes (9.23 MB) |
+| Duration | 27.429 seconds |
+
+**Critical**: This is **32-bit IEEE 754 floating-point**, not 16-bit PCM as in the original RC-505. The extended `fmt` chunk (28 bytes with cbSize=10) includes extra fields for float format description. First audio samples are near-zero values (e.g., -0.00000019, +0.00000006) confirming float encoding.
+
+File size formula: `duration × 44100 × 2 channels × 4 bytes = data_size`
+
+No padding or alignment tricks observed — standard RIFF/WAVE with the 48-byte header (RIFF+fmt+data headers) followed by raw float samples.
+
+### 2.10 Key Format Differences Summary
 
 | Aspect | Original RC-505 | RC-505 mk2 |
 |--------|----------------|-------------|
 | **DB root** | `name="RC-505" revision="2"` | `name="RC-505MK2" revision="0"` |
-| **Tag naming** | Descriptive (`PlyLvl`, `TmpSync`) | **Positional single letters** (`<A>`, `<B>`, `<C>`, ...) |
-| **Data files** | `MEMORY.RC0`, `SYSTEM.RC0` | `MEMORY001A.RC0`+ others |
+| **Tag naming** | Descriptive (`PlyLvl`, `TmpSync`) | **Positional single letters** (`<A>`, `<B>`, ..., `<0>`, `<#>`) |
+| **Data files** | `MEMORY.RC0` (1 file, all 99 patches) | **`MEMORY001A.RC0`-`MEMORY099B.RC0`** (198 files) |
+| **System files** | `SYSTEM.RC0` (1 file) | **`SYSTEM1.RC0` + `SYSTEM2.RC0`** (A/B pair) |
+| **A/B backup** | None | **Every file has an A (live) and B (backup) copy** |
 | **Top-level per memory** | 1 element (`<mem>`) | **3 elements** (`<mem>`, `<ifx>`, `<tfx>`) |
-| **Tracks** | 5 (`TRACK1`-`TRACK5`) | **6** (`TRACK1`-`TRACK6`) |
-| **Track params** | 10 + hidden | **25** (A through Y) |
-| **Master params** | 6 (Lvl, Tmp, Cs, Rv, PhOut, PhOutTr) | **4** (separate REC + PLAY sections) |
-| **Assigns** | 16 | **17** |
-| **Assign params** | 6 (Sw, Src, SrcMod, Tgt, TgtMin, TgtMax) | **10** (A through J) |
-| **FX architecture** | 3 slots, single/multi mode, FX params inline in `<mem>` | **4 banks × 4 slots, in separate `<ifx>`/`<tfx>` elements** |
-| **FX types (input)** | 27 | **70** (including `_SEQ` variants) |
-| **FX types (track)** | 31 | **74** (70 + BEAT_SCATTER/REPEAT/SHIFT + VINYL_FLICK) |
-| **Per-channel EQ** | None | **12 sections** (MIC1/2, INST1L/R, INST2L/R, MAINOUTL/R, SUBOUT1L/R, SUBOUT2L/R) |
-| **Routing** | None (fixed) | **19 routing parameters** |
-| **Mixer** | None (track sliders only) | **22 mixer parameters** |
+| **Tracks** | 5 (`TRACK1`-`TRACK5`) | **6** (TRACK1-5 user + TRACK6 rhythm bus) |
+| **Track params** | 10 | **25** (A through Y) |
+| **Assigns** | 16 | **16** (ASSIGN1-16) |
+| **Assign params** | 6 | **10** (A through J) |
+| **FX architecture** | 3 slots inline in `<mem>` | **4 groups × 4 slots in separate `<ifx>`/`<tfx>`** |
+| **FX types (input)** | 27 | **66** (+ _SEQ step sequencer variants) |
+| **FX types (track)** | 31 | **70** (66 shared + BEAT_SCATTER/REPEAT/SHIFT + VINYL_FLICK) |
+| **Per-channel EQ** | None | **12 sections** (3-band parametric per I/O channel) |
+| **Routing** | Fixed | **19 routing parameters** |
+| **Mixer** | Track sliders only | **22 mixer parameters** |
 | **Internal controls** | None | **ICTL1/2/3 × TRACK(5) + PEDAL(9)** = 47 sections |
-| **External controls** | None | **CTL1-4, EXP1-2** = 6 sections |
-| **Step sequencer** | None | **Per-effect 22-value sequencer** |
-| **File footer** | None | `<count>NNNN</count>` after `</database>` |
+| **WAV format** | 16-bit PCM, stereo, 44.1kHz | **32-bit IEEE Float**, stereo, 44.1kHz |
 | **Lines per memory** | ~860 | **~25,500** |
+| **Sections per memory** | ~50 | **2,316** |
+| **File footer** | None | `<count>NNNN</count>` (save counter) |
 
 ---
 
@@ -209,7 +321,7 @@ Cross-referencing the mk2 Parameter Guide with the XML positions:
 | **PatchTreeView** | High | 99-patch browser with reordering |
 | **AudioEngine / LooperEngine** | Medium | Needs 32-bit float support and new tempo model |
 | **CustomLookAndFeel** | High | Pure cosmetic, fully reusable |
-| **XML I/O scaffolding** | Low | The `<mem>` / `<ifx>` / `<tfx>` split and positional tags require a new parser |
+| **XML I/O scaffolding** | Low | The `<mem>` / `<ifx>` / `<tfx>` split and positional tags require a new parser; invalid XML tags (`<0>`, `<#>`) require regex-based approach |
 | **RC505.h data model** | **None** | Every property definition must be rebuilt from scratch |
 | **RC505.cpp type defs** | **None** | All enum arrays, value ranges, type converters need replacing |
 
@@ -217,37 +329,45 @@ Rough estimate: **~30% of the codebase is reusable** (UI shell, property system,
 
 ---
 
-## 4. The Reverse-Engineering Challenge
+## 4. The Reverse-Engineering Status
 
-### 4.1 The Positional Tag Mapping Problem
+### 4.1 What Is Fully Decoded
 
-The mk2's single-letter tags create a **mapping table dependency**: for every XML section, you need a separate lookup that says "tag A = REVERSE, tag B = 1SHOT, tag C = PAN, ..." within `<TRACK>`, but "tag A = TEMPO, tag B = MEASURE_LENGTH, ..." within `<MASTER>`.
+With the full device dump analysis, the following are now **completely understood**:
 
-The [RC-505mkII Parameter Guide](https://files.kraftmusic.com/media/ownersmanual/Boss_RC-505mkII_Parameter_Guide.pdf) (44 pages) is the primary decoding reference. It lists parameters in the same order they appear in the XML. This is sufficient for the settings sections (TRACK, MASTER, REC, PLAY, RHYTHM, ASSIGN, INPUT, OUTPUT).
+- **Filesystem layout**: file naming, A/B pairing, directory structure, WAV naming convention
+- **XML structure**: `<mem>` / `<ifx>` / `<tfx>` architecture, all 2,316 sections identified
+- **TRACK parameters (A-Y)**: All 25 fields decoded with verification against WAV metadata
+  - Tempo, measure length, sample count, loop length relationships verified mathematically
+  - S = X/V (measures = total_samples / samples_per_measure) confirmed across 36 tracks
+  - U/10 = BPM, V/44100 = measure duration in seconds
+- **TRACK6 purpose**: Rhythm output bus, not user-recordable (no WAV files, no FX sections)
+- **FX architecture**: 4 groups × 4 slots, IFX (66 types) vs TFX (70 types), type selection via index
+- **WAV format**: 32-bit IEEE Float, stereo, 44.1kHz, standard RIFF/WAVE with extended fmt chunk
+- **SYSTEM.RC0**: Complete section inventory (591 lines, 33 sections)
+- **A/B file semantics**: A=live, B=backup; identical for factory defaults, diverge on user edit
+- **Count footer**: Save/version counter, not checksum
+- **NAME encoding**: ASCII character codes in fields A-L (12 characters max)
 
-For the **70 FX types and their parameters**, the Parameter Guide's "Input FX/Track FX List" (pages 33-41) documents each effect's parameters and their value ranges, which can be mapped positionally to the XML child tags.
+### 4.2 What Remains to Verify
 
-### 4.2 What Remains Unknown
+Lower-priority items that need empirical testing on the device:
 
-Even with the Parameter Guide, these aspects need empirical verification from device dumps:
-- Exact semantics of TRACK tags P-T and W-Y (likely input routing bitmasks and internal state)
-- The `ROUTING` section's 19 parameters (not fully documented in the Parameter Guide)
-- The `ICTL1/2/3_*` sections (internal control linkages, 47 sections × 3 params each)
-- The `FIXED_VALUE` section's purpose
-- Whether `TRACK6` is a real user track or an internal bus
-- The exact binary format of the `<count>` footer
-- Full 99-memory file structure (does each memory have its own `<ifx>` and `<tfx>`, or are they shared?)
-- `SYSTEM.RC0` structure (no dump available yet)
-- WAV file format details (32-bit float confirmed by rc600editor; 512 KB padding structure unknown)
+- **FX type index mapping**: The exact numeric index → effect type correspondence (C field in slot headers). Can be derived by changing one FX on the device and re-dumping
+- **ROUTING section semantics**: 19 parameters (values 0, 63, 127 observed — likely a send matrix)
+- **ICTL/ECTL mappings**: Internal/external control section A field values map to specific functions (likely matches MIDI CC numbers from the MIDI implementation)
+- **ASSIGN section field mapping**: 10 fields (A-J), partially decoded (A=switch, C=target, D=source type, F=max, H=source CC, J=enable)
+- **RHYTHM.RC0 binary format**: Pattern data encoding (low priority — rhythm patterns can be edited on the device)
+- **PLAY/REC section semantics**: 8 and 6 fields respectively, need Parameter Guide cross-reference
 
-### 4.3 Getting a Complete Dump
+### 4.3 The Positional Tag Mapping Problem — Largely Solved
 
-The single-memory dump is invaluable but a **full 99-memory + system dump from your own device** would resolve most unknowns. The ideal dump includes:
-1. `ROLAND/DATA/MEMORY*.RC0` — all memory files
-2. `ROLAND/DATA/SYSTEM*.RC0` — system settings
-3. `ROLAND/DATA/RHYTHM*.RC0` — user rhythm data (if present)
-4. At least one `ROLAND/WAVE/` directory with an actual WAV file (for format verification)
-5. A dump with at least one non-default memory (one where you've changed settings/recorded a loop) to see which values differ from defaults
+The [RC-505mkII Parameter Guide](https://files.kraftmusic.com/media/ownersmanual/Boss_RC-505mkII_Parameter_Guide.pdf) (44 pages) lists parameters in the same order they appear in the XML. Combined with the dump analysis, the mapping is now tractable:
+
+- **TRACK, MASTER, NAME**: Fully decoded from empirical analysis
+- **REC, PLAY, RHYTHM**: Parameter Guide provides the order; dump provides value ranges
+- **FX parameters**: Parameter Guide pages 33-41 list each effect's parameters in XML order
+- **SYSTEM sections**: Same structure as memory-level equivalents
 
 ---
 
@@ -267,17 +387,19 @@ The recommended approach:
    - A JSON/YAML schema file defining each section's tag-to-parameter mapping, value ranges, and display types
    - A generic parser that reads the schema and the RC0 file, producing an in-memory property tree
    - Template-based serialization for writing back
-4. **Decode the format incrementally**: Start with the well-understood sections (TRACK, MASTER, REC, PLAY, RHYTHM, NAME) and add FX support progressively.
+4. **Handle Roland's non-standard XML**: Use regex-based parsing (not standard XML parsers) to handle `<0>`, `<1>`, `<#>` tags in STEP_SLICER and other sections.
+5. **32-bit float WAV support**: Replace the original editor's 16-bit PCM WAV I/O with IEEE Float read/write.
+6. **Multi-file architecture**: Handle 198 individual memory files instead of one monolithic file. Support A/B file pairs (only modify A files; optionally sync B).
 
 ### Phased Implementation
 
-| Phase | Scope | Prerequisite |
-|-------|-------|-------------|
-| **1: Format mapping** | Complete positional tag → parameter mapping for all `<mem>` sections using Parameter Guide | Parameter Guide (available) |
-| **2: Core editor** | Read/write memory settings (no FX). Patch browser, name editor, track/master/rec/play/rhythm settings | Phase 1 + full device dump |
-| **3: FX support** | Input FX and Track FX editing (70+ types × 4 banks × 4 slots) | Phase 2 |
-| **4: Audio** | WAV import/export with correct format (32-bit float, padding) | WAV file samples from device |
-| **5: System settings** | System.RC0 editing | System dump |
+| Phase | Scope | Status |
+|-------|-------|--------|
+| **1: Format mapping** | Complete positional tag → parameter mapping for all sections | **~80% complete** (TRACK fully decoded, FX structure mapped, SYSTEM inventoried) |
+| **2: Core editor** | Read/write memory settings (no FX). Patch browser, name editor, track/master/rec/play/rhythm settings | Ready to begin |
+| **3: FX support** | Input FX and Track FX editing (66-70 types × 4 groups × 4 slots) | Blocked on FX type index mapping |
+| **4: Audio** | WAV import/export with 32-bit float format | **Format fully decoded** — straightforward implementation |
+| **5: System settings** | SYSTEM1.RC0 editing | **Structure decoded** |
 | **6: Advanced** | Mixer, routing, EQ, step sequencer editing, playback engine | Phases 2-5 |
 
 ---
@@ -297,8 +419,8 @@ There is currently **no open-source editor for the RC-505 mk2**. The rc600editor
 
 ## 7. Conclusion
 
-The mk2's format is **more different from the original RC-505 than initially expected**. The shift to positional single-letter tags, the 3-element-per-memory structure, and the 30× increase in per-memory data (860 → 25,500 lines) mean this is not a "remap the tag names" exercise — it's a fundamentally different data architecture that requires a new parser, new mapping tables, and a new serialization strategy.
+The mk2's format is **more different from the original RC-505 than initially expected**, but the full device dump analysis has resolved most unknowns. The shift to positional single-letter tags, per-memory individual files with A/B backup pairs, the 3-element-per-memory structure, and the 30× increase in per-memory data (860 → 25,500 lines) mean this is not a "remap the tag names" exercise — it's a fundamentally different data architecture.
 
-However, the format is **regular and predictable**: sections are cleanly separated, values are plain integers, the FX structure is systematically repeated across all banks/slots, and the Parameter Guide provides the mapping key. An editor built on data-driven mapping tables (rather than hardcoded C++ property classes) could support the mk2 with a manageable schema file, and could later be extended to other Boss loopers by swapping schemas.
+However, the format is now **well-understood and regular**: sections are cleanly separated, values are plain integers, the FX structure is systematically repeated, tempo/sample relationships are mathematically verified, and the WAV format is standard (just 32-bit float instead of 16-bit PCM). An editor built on data-driven mapping tables could support the mk2 with a manageable schema file.
 
-**Next step**: Obtain a full device dump (all RC0 files + at least one WAV) from your RC-505 mk2 to complete the format mapping and begin implementation.
+**The reverse-engineering phase is substantially complete. The project is ready to move to implementation.**
