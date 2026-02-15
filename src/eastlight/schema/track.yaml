@@ -1,0 +1,165 @@
+section: TRACK
+instances: ["TRACK1", "TRACK2", "TRACK3", "TRACK4", "TRACK5", "TRACK6"]
+fields:
+  A:
+    name: reverse
+    type: bool
+    display: "Reverse"
+    default: 0
+  B:
+    name: one_shot
+    type: bool
+    display: "1Shot"
+    default: 0
+  C:
+    name: pan
+    type: int
+    range: [0, 100]
+    default: 50
+    display: "Pan"
+  D:
+    name: play_level
+    type: int
+    range: [0, 200]
+    default: 100
+    display: "Play Level"
+  E:
+    name: start_mode
+    type: enum
+    default: 0
+    display: "Start"
+    choices:
+      0: "IMMEDIATE"
+      1: "FADE IN"
+  F:
+    name: stop_mode
+    type: enum
+    default: 0
+    display: "Stop"
+    choices:
+      0: "IMMEDIATE"
+      1: "FADE OUT"
+  G:
+    name: dub_mode
+    type: enum
+    default: 0
+    display: "Dub Mode"
+    choices:
+      0: "OVERDUB"
+      1: "REPLACE"
+      2: "DOB LATCH"
+  H:
+    name: track_state
+    type: bool
+    display: "Track State"
+    default: 0
+    read_only: true
+  I:
+    name: reserved_i
+    type: int
+    default: 0
+    display: "(reserved)"
+    read_only: true
+  J:
+    name: color
+    type: int
+    range: [0, 27]
+    default: 0
+    display: "Color"
+  K:
+    name: loop_sync
+    type: bool
+    default: 0
+    display: "Loop Sync"
+  L:
+    name: tempo_sync_sw
+    type: bool
+    default: 1
+    display: "Tempo Sync"
+  M:
+    name: fx_sw
+    type: bool
+    default: 0
+    display: "FX"
+  N:
+    name: tempo_sync_mode
+    type: bool
+    default: 1
+    display: "Tempo Sync Mode"
+  O:
+    name: bounce_in
+    type: bool
+    default: 1
+    display: "Bounce In"
+  P:
+    name: reserved_p
+    type: int
+    default: 0
+    display: "(reserved)"
+    read_only: true
+  Q:
+    name: input_sensitivity
+    type: int
+    range: [0, 127]
+    default: 127
+    display: "Input Sensitivity"
+  R:
+    name: play_mode
+    type: enum
+    default: 0
+    display: "Play Mode"
+    choices:
+      0: "MULTI"
+      1: "SINGLE"
+      2: "SEQUENTIAL"
+  S:
+    name: loop_length
+    type: int
+    range: [0, 1000]
+    default: 0
+    display: "Loop Length"
+    unit: "measures"
+    computed: true
+  T:
+    name: reserved_t
+    type: int
+    default: 0
+    display: "(reserved)"
+    read_only: true
+  U:
+    name: tempo_x10
+    type: int
+    range: [200, 3000]
+    default: 1200
+    display: "Tempo"
+    unit: "×0.1 BPM"
+  V:
+    name: samples_per_measure
+    type: int
+    range: [0, 10000000]
+    default: 0
+    display: "Samples/Measure"
+    computed: true
+    read_only: true
+  W:
+    name: has_audio
+    type: bool
+    default: 0
+    display: "Has Audio"
+    read_only: true
+  X:
+    name: total_samples
+    type: int
+    range: [0, 100000000]
+    default: 0
+    display: "Total Samples"
+    read_only: true
+  Y:
+    name: rec_state
+    type: enum
+    default: 2
+    display: "Rec State"
+    read_only: true
+    choices:
+      1: "RECORDED"
+      2: "EMPTY"

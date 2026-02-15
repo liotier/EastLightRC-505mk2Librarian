@@ -424,3 +424,208 @@ The mk2's format is **more different from the original RC-505 than initially exp
 However, the format is now **well-understood and regular**: sections are cleanly separated, values are plain integers, the FX structure is systematically repeated, tempo/sample relationships are mathematically verified, and the WAV format is standard (just 32-bit float instead of 16-bit PCM). An editor built on data-driven mapping tables could support the mk2 with a manageable schema file.
 
 **The reverse-engineering phase is substantially complete. The project is ready to move to implementation.**
+
+---
+
+## 8. Implementation Decisions
+
+### 8.1 License
+
+**GPL-3.0-or-later**. The westlicht/rc505-editor is GPLv3, and the GPL was chosen over the Unlicense to protect against proprietary exploitation of what is fundamentally a community-serving tool.
+
+### 8.2 Language
+
+**Python 3.11+**. Chosen for portability, rich library ecosystem for audio and GUI, and readability that encourages community contributions.
+
+### 8.3 Library Selection
+
+| Library | Purpose | Why |
+|---------|---------|-----|
+| **soundfile** | 32-bit float WAV I/O | Native IEEE Float support via libsndfile; efficient metadata reads (`sf.info()`); chunked reading for waveform display; bundled libsndfile on all platforms |
+| **numpy** | Audio data arrays | Required by soundfile; efficient array ops for waveform overview generation |
+| **pyyaml** | Schema definition files | YAML is human-readable for parameter mapping tables that contributors will edit |
+| **click** | CLI framework | Composable commands, good help generation, mature and well-documented |
+| **rich** | Terminal output | Tables, colored output, progress bars for CLI usability |
+| **PySide6** | GUI (future) | Official Qt binding (LGPL); QTreeView for patch browser, QPainter for waveforms, property editor widgets, drag-and-drop, cross-platform; proven in audio software |
+| **pytest** | Testing | Standard Python test framework |
+| **ruff** | Linting/formatting | Fast, replaces flake8+black+isort in one tool |
+
+**Rejected alternatives:**
+- `wave` (stdlib): Cannot read 32-bit float WAV — only supports integer PCM
+- `scipy.io.wavfile`: 32-bit float works but SciPy is a heavy dependency for just audio I/O; no metadata-only reads
+- `pydub`: Known data corruption with 32-bit float files; relies on external ffmpeg
+- `PyQt6`: Functionally identical to PySide6 but GPL license adds unnecessary restrictions for downstream users
+- `Dear PyGui`: Non-native appearance; immediate-mode paradigm unsuitable for property-heavy desktop app
+- `Toga/BeeWare`: Not production-ready as of 2026 (tree/table widgets still incomplete)
+- `Electron/Tauri`: Excellent aesthetics but two-language stack (Python+JS) adds complexity without proportional benefit
+
+### 8.4 Project Architecture
+
+The core design principle is **schema-driven data mapping**: YAML files define the positional tag → parameter name correspondence, value ranges, and display metadata. The parser is generic; adding or fixing mappings means editing YAML, not code.
+
+```
+eastlight/
+├── pyproject.toml                 # Package metadata, dependencies, entry points
+├── LICENSE                        # GPL-3.0-or-later
+├── rc505-mk2-feasibility.md      # This document
+├── src/
+│   └── eastlight/
+│       ├── __init__.py
+│       ├── schema/                # YAML parameter mapping tables
+│       │   ├── track.yaml         # TRACK1-5 fields A-Y → named parameters
+│       │   ├── master.yaml        # MASTER section
+│       │   ├── name.yaml          # NAME section (A-L → character slots)
+│       │   ├── rec.yaml           # REC section
+│       │   ├── play.yaml          # PLAY section
+│       │   ├── rhythm.yaml        # RHYTHM section
+│       │   ├── assign.yaml        # ASSIGN1-16 fields A-J
+│       │   ├── input.yaml         # INPUT section
+│       │   ├── output.yaml        # OUTPUT section
+│       │   ├── routing.yaml       # ROUTING section
+│       │   ├── mixer.yaml         # MIXER section
+│       │   ├── eq.yaml            # EQ sections (3-band parametric)
+│       │   ├── fx_slot.yaml       # FX slot header fields
+│       │   ├── fx_group.yaml      # FX group header fields
+│       │   ├── ifx_types.yaml     # 66 input FX type definitions + parameters
+│       │   ├── tfx_types.yaml     # 70 track FX type definitions + parameters
+│       │   └── system.yaml        # SYSTEM-level sections (SETUP, COLOR, USB, MIDI, etc.)
+│       ├── core/
+│       │   ├── __init__.py
+│       │   ├── parser.py          # Regex-based RC0 reader → raw section/field dicts
+│       │   ├── writer.py          # Serialize model back to RC0 format
+│       │   ├── model.py           # Typed data model (Memory, Track, FXSlot, System)
+│       │   ├── schema.py          # Schema loader, validator, tag↔name resolver
+│       │   ├── wav.py             # 32-bit float WAV metadata and waveform overview
+│       │   └── library.py         # ROLAND/ directory manager (find, list, backup)
+│       ├── cli/
+│       │   ├── __init__.py
+│       │   └── main.py            # click-based CLI entry point
+│       └── gui/                   # Future: PySide6 GUI
+│           └── __init__.py
+├── tests/
+│   ├── conftest.py                # Shared fixtures
+│   ├── test_parser.py
+│   ├── test_writer.py
+│   ├── test_model.py
+│   ├── test_schema.py
+│   └── fixtures/                  # Sample RC0 files for testing
+│       └── .gitkeep
+└── docs/
+    └── .gitkeep
+```
+
+#### Data Flow
+
+```
+RC0 file on disk
+    │
+    ▼
+parser.py (regex-based)
+    │ produces: dict of section_name → dict of tag → int_value
+    ▼
+schema.py (YAML mapping tables)
+    │ resolves: tag letters → parameter names, validates ranges
+    ▼
+model.py (typed data model)
+    │ Memory / Track / FXGroup / FXSlot / System objects
+    │ with named attributes, validation, change tracking
+    ▼
+  ┌─┴─┐
+  │   │
+cli   gui     (presentation layers)
+  │   │
+  └─┬─┘
+    │ edits flow back through model → schema → writer
+    ▼
+writer.py (RC0 serializer)
+    │ produces: correctly formatted RC0 with positional tags
+    ▼
+RC0 file on disk (+ count footer incremented)
+```
+
+#### Schema Format
+
+Each YAML schema file defines one section type:
+
+```yaml
+# Example: schema/track.yaml
+section: TRACK
+instances: ["TRACK1", "TRACK2", "TRACK3", "TRACK4", "TRACK5", "TRACK6"]
+fields:
+  A:
+    name: reverse
+    type: bool
+    display: "Reverse"
+    default: 0
+  B:
+    name: one_shot
+    type: bool
+    display: "1Shot"
+    default: 0
+  C:
+    name: pan
+    type: int
+    range: [0, 100]
+    default: 50
+    display: "Pan"
+  D:
+    name: play_level
+    type: int
+    range: [0, 200]
+    default: 100
+    display: "Play Level"
+  # ... through Y
+  U:
+    name: tempo_x10
+    type: int
+    range: [200, 3000]
+    default: 1200
+    display: "Tempo"
+    unit: "×0.1 BPM"
+  V:
+    name: samples_per_measure
+    type: int
+    range: [0, 10000000]
+    display: "Samples/Measure"
+    computed: true
+  W:
+    name: has_audio
+    type: bool
+    display: "Has Audio"
+    read_only: true
+  X:
+    name: total_samples
+    type: int
+    range: [0, 100000000]
+    display: "Total Samples"
+    read_only: true
+```
+
+#### Key Design Decisions
+
+1. **Regex parser, not XML**: Roland's RC0 files use invalid XML tags (`<0>`, `<#>`). A regex-based parser handles all tag names without special-casing.
+
+2. **Schema-driven mapping**: The positional tag → parameter name mapping lives in YAML, not in code. This means:
+   - Fixing a mapping error = edit YAML, no code change
+   - Community contributors can verify mappings without reading Python
+   - The same schema drives both parsing and serialization (round-trip fidelity)
+
+3. **A-files only for writes**: The editor modifies A files (live state). B files can optionally be synced as backups, but are never the primary edit target.
+
+4. **Count footer**: Incremented on each write to maintain Roland's save counter semantics. Not a checksum — just bumped by 1.
+
+5. **Library separate from CLI/GUI**: `eastlight.core` has zero UI dependencies. The CLI and GUI are thin presentation layers that import the core. This enables:
+   - Scripting: `import eastlight.core` for automation
+   - Testing: Core logic tested without UI
+   - Alternative UIs: TUI, web, or third-party integrations
+
+### 8.5 Revised Phase Plan
+
+| Phase | Scope | Dependencies |
+|-------|-------|-------------|
+| **1: Core library** | RC0 parser, writer, schema loader, data model. Read a memory file, map all fields to named parameters, write it back unchanged (round-trip test). | pyyaml |
+| **2: CLI** | `eastlight list` (show memories), `eastlight show <N>` (display parameters), `eastlight set <N> track1.pan 60` (edit), `eastlight diff <A> <B>` (compare A/B files), `eastlight name <N> "New Name"`. | click, rich |
+| **3: WAV support** | `eastlight wav-info <N>` (display WAV metadata), `eastlight wav-export <N> <T>` (export track WAV), `eastlight wav-import <N> <T> <file>` (import WAV with format conversion). | soundfile, numpy |
+| **4: FX support** | Complete IFX/TFX schema from Parameter Guide. `eastlight fx-show <N>`, `eastlight fx-set <N>`. | — |
+| **5: GUI** | PySide6 application: patch browser tree, property editor, waveform display, drag-and-drop patch reordering. | PySide6 |
+| **6: Advanced** | System settings editor, mixer/routing/EQ, step sequencer visualization, audio preview/playback. | — |

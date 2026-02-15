@@ -1,0 +1,75 @@
+section: NAME
+instances: ["NAME"]
+fields:
+  A:
+    name: char_1
+    type: int
+    range: [0, 127]
+    default: 32
+    display: "Character 1"
+  B:
+    name: char_2
+    type: int
+    range: [0, 127]
+    default: 32
+    display: "Character 2"
+  C:
+    name: char_3
+    type: int
+    range: [0, 127]
+    default: 32
+    display: "Character 3"
+  D:
+    name: char_4
+    type: int
+    range: [0, 127]
+    default: 32
+    display: "Character 4"
+  E:
+    name: char_5
+    type: int
+    range: [0, 127]
+    default: 32
+    display: "Character 5"
+  F:
+    name: char_6
+    type: int
+    range: [0, 127]
+    default: 32
+    display: "Character 6"
+  G:
+    name: char_7
+    type: int
+    range: [0, 127]
+    default: 32
+    display: "Character 7"
+  H:
+    name: char_8
+    type: int
+    range: [0, 127]
+    default: 32
+    display: "Character 8"
+  I:
+    name: char_9
+    type: int
+    range: [0, 127]
+    default: 32
+    display: "Character 9"
+  J:
+    name: char_10
+    type: int
+    range: [0, 127]
+    default: 32
+    display: "Character 10"
+  K:
+    name: char_11
+    type: int
+    range: [0, 127]
+    default: 32
+    display: "Character 11"
+  L:
+    name: char_12
+    type: int
+    range: [0, 127]
+    default: 32
+    display: "Character 12"
