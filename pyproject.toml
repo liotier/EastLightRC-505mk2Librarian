@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eastlight"
+version = "0.1.0"
+description = "Open-source editor/librarian for the Roland RC-505 MK2 loop station"
+readme = "rc505-mk2-feasibility.md"
+license = "GPL-3.0-or-later"
+requires-python = ">=3.11"
+authors = [
+    {name = "EastLight contributors"},
+]
+keywords = ["roland", "rc505", "loop-station", "midi", "audio", "editor"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: End Users/Desktop",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Sound/Audio",
+    "Topic :: Multimedia :: Sound/Audio :: Editors",
+]
+dependencies = [
+    "pyyaml>=6.0",
+    "click>=8.1",
+    "rich>=13.0",
+    "soundfile>=0.12",
+    "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+gui = ["PySide6>=6.6"]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+eastlight = "eastlight.cli.main:cli"
+
+[project.urls]
+Homepage = "https://github.com/liotier/EastLight505"
+Repository = "https://github.com/liotier/EastLight505"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+eastlight = ["schema/*.yaml"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
