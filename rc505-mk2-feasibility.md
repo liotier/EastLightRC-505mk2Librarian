@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-Extending the [westlicht/rc505-editor](https://github.com/westlicht/rc505-editor) to support the RC-505 mk2 is **technically feasible but amounts to a near-complete rewrite of the data model layer**. The editor's architecture (C++/JUCE, property system, XML I/O) is sound and reusable, but the mk2 uses a substantially different XML schema, audio format, effect architecture, and parameter set. A realistic approach would treat the existing editor as architectural scaffolding and rebuild the data model from the mk2's actual RC0 files.
+Extending the [westlicht/rc505-editor](https://github.com/westlicht/rc505-editor) to support the RC-505 mk2 is **technically feasible but requires a complete data model rewrite and a significant reverse-engineering effort**. Analysis of an actual mk2 `MEMORY001A.RC0` dump reveals that Roland adopted a radically different XML format: **all property names are replaced with single-letter positional tags** (`<A>`, `<B>`, `<C>`, ...), the effects are stored in separate top-level elements (`<ifx>`, `<tfx>`), and there are 6 tracks instead of 5. The best path forward is to fork the editor, reuse its JUCE UI shell and generic property system, and build the mk2 data model from scratch using the [Parameter Guide](https://files.kraftmusic.com/media/ownersmanual/Boss_RC-505mkII_Parameter_Guide.pdf) as the Rosetta Stone for mapping positional XML tags to human-readable parameter names.
 
 ---
 
@@ -20,166 +20,285 @@ Key architectural components:
 - **Audio engine** using JUCE + libsamplerate + Rubber Band for playback with tempo sync
 - **Multi-document interface** supporting multiple libraries simultaneously
 
-The editor hardcodes `revision="2"` and `name="RC-505"` in the XML root, and all ~1,742 lines of `RC505.h` define the original RC-505's exact parameter set.
+The editor hardcodes `revision="2"` and `name="RC-505"` in the XML root, and all ~1,742 lines of `RC505.h` define the original RC-505's exact parameter set with descriptive XML tag names like `PlyLvl`, `TmpSync`, `DubMod`.
 
 ---
 
-## 2. What Changes in the mk2
+## 2. The mk2 RC0 Format: Analysis of Actual Data
 
-### 2.1 XML Schema Differences
+Analysis based on [MEMORY001A.RC0](https://gist.githubusercontent.com/liotier/08f0b33abf8962533ac9b6beef2d1721/raw/c458e85b79456edebd42ef4609ce5acf9035ca05/MEMORY001A.RC0) — a single-memory-slot dump from an RC-505 mk2 (25,516 lines).
 
-The mk2 belongs to a newer generation of Boss loopers (alongside RC-500 and RC-600) that use a **different XML tag naming convention**. Comparing the original RC-505 to the newer-generation format:
+### 2.1 Top-Level Structure
 
-| Aspect | Original RC-505 | RC-505 mk2 (newer gen) |
-|--------|----------------|----------------------|
-| DB root | `name="RC-505" revision="2"` | Different name/revision |
-| Tag style | Terse abbreviations (`Tmp`, `Lvl`, `Cs`, `Rv`, `LpSync`, `TmpSync`) | Longer descriptive names (`Tempo`, `Level`, `LoopSync`, `TempoSync`) |
-| FX enable | `TrkFx` | `LoopFx` |
-| Assign tags | `Src`, `SrcMod`, `Tgt`, `TgtMin`, `TgtMax` | `Source`, `SourceMode`, `Target`, `TargetMin`, `TargetMax` |
-| Rec/play options | Separate `REC_OPTION`, `PLAY_OPTION` groups | Consolidated into `MASTER` |
-| FX architecture | `INPUT_FX` + `TRACK_FX` + `BEAT_FX` with 3 slots each containing params for all 27-31 FX types | Restructured: 4 FX banks (A-D), 4 simultaneous slots, master FX |
-| Data files | `MEMORY.RC0`, `SYSTEM.RC0` | `MEMORY1.RC0`, `MEMORY2.RC0`, `SYSTEM.RC0`, `RHYTHM.RC0` |
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<database name="RC-505MK2" revision="0">
+  <mem id="0">    <!-- Lines 3-937: Memory settings (935 lines) -->
+    ...
+  </mem>
+  <ifx id="0">    <!-- Lines 938-13106: Input FX definitions (12,169 lines) -->
+    ...
+  </ifx>
+  <tfx id="0">    <!-- Lines 13107-25515: Track FX definitions (12,409 lines) -->
+    ...
+  </tfx>
+</database>
+<count>0003</count>   <!-- Binary footer/checksum outside XML -->
+```
 
-This means **every XML tag in the data model must be remapped**. The existing `RC505.h` property definitions cannot be reused as-is — every property name string, every XML element name, and every enum value list needs updating.
+**Three separate top-level elements per memory** — the original RC-505 stores everything in a single `<mem>` element. The mk2 splits memory settings (`<mem>`), input effects (`<ifx>`), and track effects (`<tfx>`) into sibling elements with matching `id` attributes. A full 99-memory file would contain 297 top-level elements.
 
-### 2.2 Audio Format
+The `<count>0003</count>` footer after `</database>` confirms the RC0 format includes non-XML trailer data (count of top-level sections: 3 = mem + ifx + tfx).
 
-| | Original RC-505 | RC-505 mk2 |
-|---|---|---|
-| Bit depth | 16-bit integer | **32-bit floating point** |
-| Sample rate | 44.1 kHz | 44.1 kHz |
-| Channels | Stereo | Stereo |
-| Special requirement | None | **512 KB padding in WAV files** |
+### 2.2 Obfuscated Tag Names
 
-The mk2 rejects WAV files without a proprietary 512 KB padding block. The editor's WAV import/export code (`Utils.cpp`) must be modified to write this padding, and the resampler must output 32-bit float instead of 16-bit integer.
+The most significant format change: **all child element names within sections are replaced by sequential single letters**.
 
-### 2.3 Expanded Parameters
+Original RC-505 (descriptive):
+```xml
+<TRACK1>
+  <Rev>0</Rev>
+  <PlyLvl>50</PlyLvl>
+  <Pan>50</Pan>
+  <TmpSync>1</TmpSync>
+</TRACK1>
+```
 
-| Feature | Original RC-505 | RC-505 mk2 |
-|---------|----------------|-------------|
-| Input FX types | 27 | **49** |
-| Track FX types | 31 | **53** |
-| Simultaneous Input FX | 3 | **4** |
-| Simultaneous Track FX | 3 | **4** |
-| FX banks | None | **4 (A-D)** |
-| Master FX | None | **2** |
-| Rhythm patterns | 85 | **200** |
-| Drum kits | Undocumented | **16** |
-| Assigns | 16 | 16 |
-| Tracks | 5 | 5 |
-| Memory slots | 99 | 99 |
-| XLR inputs | 1 | **2** |
-| Output pairs | 1 stereo | **3 stereo** |
-| Total recording time | ~3 hours | **~13 hours** |
+RC-505 mk2 (positional):
+```xml
+<TRACK1>
+  <A>0</A>      <!-- REVERSE -->
+  <B>0</B>      <!-- 1SHOT -->
+  <C>50</C>     <!-- PAN -->
+  <D>100</D>    <!-- PLAY LEVEL -->
+  ...
+  <Y>2</Y>
+</TRACK1>
+```
 
-Every new effect type needs its own parameter group with individually defined properties. The FX architecture change from 3-slot single/multi mode to 4-bank A-D is a structural redesign of the effects data model.
+This means **parsing the mk2 format requires a positional mapping table** — you must know that `<A>` in a `<TRACK>` section means REVERSE, `<B>` means 1SHOT, etc. The [Parameter Guide PDF](https://files.kraftmusic.com/media/ownersmanual/Boss_RC-505mkII_Parameter_Guide.pdf) lists parameters in the same order as they appear in the XML, making it the essential decoding reference.
 
-### 2.4 Storage Access
+### 2.3 Complete Section Inventory
 
-The original RC-505 uses a removable (glued-in) micro SD card that appears as a `BOSS_RC-505` USB volume. The mk2 has **non-removable internal storage** but still presents as USB mass storage. The volume detection code (`Library::checkVolumesForRC505()`) needs to scan for a different volume name.
+#### Inside `<mem>` (99 unique section names):
+
+| Section | Child Tags | Purpose |
+|---------|------------|---------|
+| `NAME` | A-L (12) | Patch name as ASCII character codes |
+| `TRACK1` through `TRACK6` | A-Y (25 each) | Per-track settings |
+| `MASTER` | A-D (4) | Tempo and master settings |
+| `REC` | A-F (6) | Recording options |
+| `PLAY` | A-H (8) | Playback options |
+| `RHYTHM` | A-M (13) | Rhythm settings |
+| `ICTL1_TRACK1_FX` through `ICTL2_TRACK5_TRACK` | A-C (3 each) | Internal control targets (20 sections) |
+| `ICTL1_PEDAL1` through `ICTL3_PEDAL9` | A-C (3 each) | Internal control pedal mappings (27 sections) |
+| `ECTL_CTL1` through `ECTL_EXP2` | A-D/E (4-5 each) | External control mappings (6 sections) |
+| `ASSIGN1` through `ASSIGN17` | A-J (10 each) | Assignable controls |
+| `INPUT` | A-M (13) | Input configuration |
+| `OUTPUT` | A-D (4) | Output configuration |
+| `ROUTING` | A-S (19) | Signal routing matrix |
+| `MIXER` | A-V (22) | Level mixer |
+| `EQ_MIC1` through `EQ_SUBOUT2R` | A-L (12 each) | Per-channel parametric EQ (12 sections) |
+| `MASTER_FX` | A-C (3) | Master effects (comp/reverb) |
+| `FIXED_VALUE` | A-B (2) | Fixed internal values |
+| `SETUP` | A (1) | Memory-level setup |
+
+#### Inside `<ifx>` and `<tfx>` (Input FX / Track FX):
+
+Each contains a `<SETUP>` header, then **4 FX banks** (`<A>` through `<D>`), each bank containing **4 slots** (`<AA>` through `<AD>` for bank A, `<BA>` through `<BD>` for bank B, etc.), and **each slot storing parameters for all 70 effect types** as separate sections:
+
+```
+<ifx id="0">
+  <SETUP><A>0</A></SETUP>
+  <A>                          ← Bank A header (3 values: mode, sw, FX target)
+    <A>1</A><B>1</B><C>3</C>
+  </A>
+  <AA>                         ← Bank A, Slot A header (4 values)
+    <A>0</A><B>0</B><C>0</C><D>0</D>
+  </AA>
+  <AA_LPF>                     ← Bank A, Slot A, LPF parameters
+    <A>3</A><B>50</B><C>50</C><D>50</D><E>0</E>
+  </AA_LPF>
+  <AA_LPF_SEQ>                 ← Bank A, Slot A, LPF step sequencer (22 values)
+    <A>0</A>...<V>0</V>
+  </AA_LPF_SEQ>
+  <AA_BPF>...</AA_BPF>
+  <AA_BPF_SEQ>...</AA_BPF_SEQ>
+  ... (70 effect types × {params + seq} per slot)
+  <AB>...</AB>                 ← Bank A, Slot B
+  ... (repeat for all 4 slots)
+  <B>...</B>                   ← Bank B header
+  ... (repeat for all 4 banks)
+</ifx>
+```
+
+**70 unique FX types** per slot (common to both ifx and tfx):
+LPF, BPF, HPF, PHASER, FLANGER, SYNTH, LOFI, RADIO, RING_MODULATOR, G2B, SUSTAINER, AUTO_RIFF, SLOW_GEAR, TRANSPOSE, PITCH_BEND, ROBOT, ELECTRIC, HARMONIST_MANUAL, HARMONIST_AUTO, VOCODER, OSC_VOCODER, OSC_BOT, PREAMP, DIST, DYNAMICS, EQ, ISOLATOR, OCTAVE, AUTO_PAN, MANUAL_PAN, STEREO_ENHANCE, TREMOLO, VIBRATO, PATTERN_SLICER, STEP_SLICER, DELAY, PANNING_DELAY, REVERSE_DELAY, MOD_DELAY, TAPE_ECHO, TAPE_ECHO_V505V2, GRANULAR_DELAY, WARP, TWIST, ROLL, ROLL_V505V2, FREEZE, CHORUS, REVERB, GATE_REVERB, REVERSE_REVERB
+
+**`tfx` has 4 additional types** not in `ifx`: BEAT_SCATTER, BEAT_REPEAT, BEAT_SHIFT, VINYL_FLICK
+
+Most effects also have a `_SEQ` companion section (22 values: step sequencer parameters).
+
+### 2.4 Decoded TRACK Parameters (A-Y → Parameter Guide Mapping)
+
+Cross-referencing the mk2 Parameter Guide with the XML positions:
+
+| XML Tag | Value in dump | Parameter | Notes |
+|---------|---------------|-----------|-------|
+| A | 0 | REVERSE | OFF/ON |
+| B | 0 | 1SHOT | OFF/ON |
+| C | 50 | PAN | 0=L50, 50=CENTER, 100=R50 |
+| D | 100 | PLAY LEVEL | 0-200 |
+| E | 0 | START MODE | 0=IMMEDIATE, 1=FADE |
+| F | 0 | STOP MODE | 0=IMMEDIATE, 1=FADE, 2=LOOP |
+| G | 0 | DUB MODE | 0=OVERDUB, 1=REPLACE1, 2=REPLACE2 |
+| H | 1 | FX | 0=OFF, 1=ON |
+| I | 0 | PLAY MODE | 0=MULTI, 1=SINGLE |
+| J | 1 | MEASURE | 0=AUTO, 1=FREE, 2+=measures |
+| K | 0 | LOOP SYNC | OFF/ON |
+| L | 1 | TEMPO SYNC SW | OFF/ON |
+| M | 1 | TEMPO SYNC MODE | 0=PITCH, 1=XFADE |
+| N | 1 | TEMPO SYNC SPEED | 0=HALF, 1=NORMAL, 2=DOUBLE |
+| O | 1 | BOUNCE IN | OFF/ON |
+| P | 0 | INPUT (low byte?) | Input routing |
+| Q | 127 | INPUT (bitmask) | 0b1111111 = all 7 inputs enabled |
+| R | 1 | (unknown) | |
+| S | 0 | (unknown) | |
+| T | 0 | (unknown) | |
+| U | 1200 | Recording tempo | BPM × 10 (120.0 BPM) |
+| V | 88200 | Wave length | Samples (= 2.0 sec at 44.1kHz) |
+| W | 0 | Wave status | |
+| X | 0 | (unknown) | |
+| Y | 2 | (unknown) | |
+
+### 2.5 Key Format Differences Summary
+
+| Aspect | Original RC-505 | RC-505 mk2 |
+|--------|----------------|-------------|
+| **DB root** | `name="RC-505" revision="2"` | `name="RC-505MK2" revision="0"` |
+| **Tag naming** | Descriptive (`PlyLvl`, `TmpSync`) | **Positional single letters** (`<A>`, `<B>`, `<C>`, ...) |
+| **Data files** | `MEMORY.RC0`, `SYSTEM.RC0` | `MEMORY001A.RC0`+ others |
+| **Top-level per memory** | 1 element (`<mem>`) | **3 elements** (`<mem>`, `<ifx>`, `<tfx>`) |
+| **Tracks** | 5 (`TRACK1`-`TRACK5`) | **6** (`TRACK1`-`TRACK6`) |
+| **Track params** | 10 + hidden | **25** (A through Y) |
+| **Master params** | 6 (Lvl, Tmp, Cs, Rv, PhOut, PhOutTr) | **4** (separate REC + PLAY sections) |
+| **Assigns** | 16 | **17** |
+| **Assign params** | 6 (Sw, Src, SrcMod, Tgt, TgtMin, TgtMax) | **10** (A through J) |
+| **FX architecture** | 3 slots, single/multi mode, FX params inline in `<mem>` | **4 banks × 4 slots, in separate `<ifx>`/`<tfx>` elements** |
+| **FX types (input)** | 27 | **70** (including `_SEQ` variants) |
+| **FX types (track)** | 31 | **74** (70 + BEAT_SCATTER/REPEAT/SHIFT + VINYL_FLICK) |
+| **Per-channel EQ** | None | **12 sections** (MIC1/2, INST1L/R, INST2L/R, MAINOUTL/R, SUBOUT1L/R, SUBOUT2L/R) |
+| **Routing** | None (fixed) | **19 routing parameters** |
+| **Mixer** | None (track sliders only) | **22 mixer parameters** |
+| **Internal controls** | None | **ICTL1/2/3 × TRACK(5) + PEDAL(9)** = 47 sections |
+| **External controls** | None | **CTL1-4, EXP1-2** = 6 sections |
+| **Step sequencer** | None | **Per-effect 22-value sequencer** |
+| **File footer** | None | `<count>NNNN</count>` after `</database>` |
+| **Lines per memory** | ~860 | **~25,500** |
 
 ---
 
 ## 3. What Can Be Reused
 
-Despite the extensive differences, several architectural components transfer directly:
-
 | Component | Reusability | Notes |
 |-----------|-------------|-------|
 | **JUCE application shell** | High | Main window, menu system, multi-document panel |
-| **Property system base classes** | High | `Property`, `Group`, `BoolProperty`, `IntProperty`, `EnumProperty`, `BitSetProperty` — the type system and observer pattern are generic |
-| **PropertyTreeView / PropertyView** | High | Generic UI for editing hierarchical property trees |
+| **Property system base classes** | High | `Property`, `Group`, `BoolProperty`, `IntProperty`, `EnumProperty` — type system and observer pattern are generic |
+| **PropertyTreeView / PropertyView** | High | Generic hierarchical property editor |
 | **WaveformView** | High | Waveform display and drag-and-drop |
 | **PatchTreeView** | High | 99-patch browser with reordering |
-| **AudioEngine / LooperEngine** | Medium | Playback engine works but needs 32-bit float support |
-| **LibraryTasks** | Medium | Threaded load/save with progress — needs path updates |
+| **AudioEngine / LooperEngine** | Medium | Needs 32-bit float support and new tempo model |
 | **CustomLookAndFeel** | High | Pure cosmetic, fully reusable |
-| **XML I/O framework** | Medium | The read/write scaffolding works, but all tag names change |
-| **RC505.h data model** | **Low** | Every property definition, enum list, and XML mapping must be rewritten |
-| **RC505.cpp type definitions** | **Low** | All enum-to-string arrays, value ranges, and type converters need replacing |
-| **WAV import/export** | Low | Needs 32-bit float output and 512 KB padding |
+| **XML I/O scaffolding** | Low | The `<mem>` / `<ifx>` / `<tfx>` split and positional tags require a new parser |
+| **RC505.h data model** | **None** | Every property definition must be rebuilt from scratch |
+| **RC505.cpp type defs** | **None** | All enum arrays, value ranges, type converters need replacing |
 
-Rough estimate: ~40-50% of the codebase (by line count) can be reused. The remaining 50-60% (primarily `RC505.h`, `RC505.cpp`, and effects-related code) requires a rewrite.
-
----
-
-## 4. Key Technical Risks
-
-### 4.1 Undocumented Format
-The mk2's RC0 XML schema is **not publicly documented by Roland**. The commercial [rc600editor.com](https://rc600editor.com/) has reverse-engineered it but is closed-source. Development requires either:
-- Access to an actual RC-505 mk2 to dump and inspect the RC0 files
-- Collaboration with someone who has one
-- Reverse-engineering from the mk2's MIDI SysEx parameter guide (available as a PDF from Boss)
-
-The [RC-505mkII Parameter Guide](https://www.boss.info/global/support/by_product/rc-505mk2/owners_manuals/) (44 pages) documents all parameters and their MIDI SysEx addresses, which can serve as a reference for the expected XML structure even before seeing actual files.
-
-### 4.2 512 KB WAV Padding
-The exact format of the required padding is not publicly documented. The rc600editor handles it, but the implementation details are proprietary. This needs reverse-engineering from actual mk2 WAV files.
-
-### 4.3 Effects Parameter Explosion
-The original editor stores parameters for all possible FX types in every FX slot (27 effect types × 3 slots × multiple sections = thousands of properties per patch). The mk2 nearly doubles the effect count and adds a bank dimension. This is the most labor-intensive part of the data model work.
-
-### 4.4 JUCE Licensing
-JUCE has moved to a dual GPL/commercial license model since the editor was written. For an open-source GPLv3 project this is fine, but worth noting.
-
-### 4.5 Stale Dependencies
-The editor uses JUCE as a git submodule pinned to an old version. Modern JUCE (v7+) has API changes that may require build system updates.
+Rough estimate: **~30% of the codebase is reusable** (UI shell, property system, audio). The remaining **~70%** requires a rewrite or new implementation (data model, FX architecture, XML parser, mixer/routing/EQ subsystems that didn't exist before).
 
 ---
 
-## 5. Alternative Approaches
+## 4. The Reverse-Engineering Challenge
 
-### 5.1 Extend the Existing Editor (Dual-Device Support)
-Add a device abstraction layer so the same application supports both RC-505 and mk2. This preserves backward compatibility but doubles the data model maintenance burden.
+### 4.1 The Positional Tag Mapping Problem
 
-**Effort**: High — requires abstracting the property system to be device-agnostic while maintaining two complete XML schema mappings.
+The mk2's single-letter tags create a **mapping table dependency**: for every XML section, you need a separate lookup that says "tag A = REVERSE, tag B = 1SHOT, tag C = PAN, ..." within `<TRACK>`, but "tag A = TEMPO, tag B = MEASURE_LENGTH, ..." within `<MASTER>`.
 
-### 5.2 Fork and Rewrite the Data Model
-Fork the repo, gut `RC505.h`/`RC505.cpp`, and rebuild the data model for the mk2 only. Reuse the JUCE shell, property system, and UI components.
+The [RC-505mkII Parameter Guide](https://files.kraftmusic.com/media/ownersmanual/Boss_RC-505mkII_Parameter_Guide.pdf) (44 pages) is the primary decoding reference. It lists parameters in the same order they appear in the XML. This is sufficient for the settings sections (TRACK, MASTER, REC, PLAY, RHYTHM, ASSIGN, INPUT, OUTPUT).
 
-**Effort**: Medium-high — cleanest path but drops original RC-505 support.
+For the **70 FX types and their parameters**, the Parameter Guide's "Input FX/Track FX List" (pages 33-41) documents each effect's parameters and their value ranges, which can be mapped positionally to the XML child tags.
 
-### 5.3 Start from Scratch with a Modern Stack
-Build a new editor using a web-based stack (Electron/Tauri + TypeScript) or Python (Qt/Tk). The RC0 format is just XML, so any language with XML parsing works.
+### 4.2 What Remains Unknown
 
-**Effort**: High — but yields a more maintainable codebase and easier community contribution.
+Even with the Parameter Guide, these aspects need empirical verification from device dumps:
+- Exact semantics of TRACK tags P-T and W-Y (likely input routing bitmasks and internal state)
+- The `ROUTING` section's 19 parameters (not fully documented in the Parameter Guide)
+- The `ICTL1/2/3_*` sections (internal control linkages, 47 sections × 3 params each)
+- The `FIXED_VALUE` section's purpose
+- Whether `TRACK6` is a real user track or an internal bus
+- The exact binary format of the `<count>` footer
+- Full 99-memory file structure (does each memory have its own `<ifx>` and `<tfx>`, or are they shared?)
+- `SYSTEM.RC0` structure (no dump available yet)
+- WAV file format details (32-bit float confirmed by rc600editor; 512 KB padding structure unknown)
 
-### 5.4 Extend the RC-500 Editor Instead
-The [dfleury2/boss-rc500-editor](https://github.com/dfleury2/boss-rc500-editor) (C++/Qt, Nlohmann JSON, Inja templates) already uses the newer-generation XML tag naming convention. Its template-driven serialization approach may be easier to adapt to the mk2 than the westlicht editor's hardcoded property definitions.
+### 4.3 Getting a Complete Dump
 
-**Effort**: Medium — the RC-500's format is closer to the mk2, and its template-based approach makes XML tag changes trivial.
-
----
-
-## 6. Recommended Approach
-
-**Option 5.2 (fork + data model rewrite) or 5.4 (extend RC-500 editor)** offer the best effort-to-value ratio.
-
-If starting from the westlicht editor:
-
-1. **Phase 1 — Format discovery**: Obtain RC0 file dumps from an actual mk2. Document the complete XML schema. Cross-reference with the Parameter Guide PDF.
-2. **Phase 2 — Data model rewrite**: Replace `RC505.h`/`RC505.cpp` with mk2 property definitions. Consider adopting the RC-500 editor's approach of using JSON as the intermediate representation and templates for serialization, rather than hardcoded C++ property classes for every parameter.
-3. **Phase 3 — Audio format**: Update WAV I/O to 32-bit float with 512 KB padding.
-4. **Phase 4 — UI adaptation**: Update effect selection UIs, add FX bank controls, expand rhythm pattern lists.
-5. **Phase 5 — Volume detection**: Update to detect the mk2's USB volume name.
-
-The critical dependency is **Phase 1** — without access to actual mk2 RC0 files, the rest is speculative.
+The single-memory dump is invaluable but a **full 99-memory + system dump from your own device** would resolve most unknowns. The ideal dump includes:
+1. `ROLAND/DATA/MEMORY*.RC0` — all memory files
+2. `ROLAND/DATA/SYSTEM*.RC0` — system settings
+3. `ROLAND/DATA/RHYTHM*.RC0` — user rhythm data (if present)
+4. At least one `ROLAND/WAVE/` directory with an actual WAV file (for format verification)
+5. A dump with at least one non-default memory (one where you've changed settings/recorded a loop) to see which values differ from defaults
 
 ---
 
-## 7. Existing Community Landscape
+## 5. Approach Recommendation
+
+### The Hybrid Path: westlicht UI + RC-500 data architecture + mk2 format
+
+Neither existing editor is directly extendable to the mk2:
+- **westlicht/rc505-editor**: Strong UI (JUCE), but its hardcoded C++ property model cannot handle the mk2's positional tags or split `<mem>`/`<ifx>`/`<tfx>` structure.
+- **dfleury2/boss-rc500-editor**: Better data architecture (JSON intermediate, Inja templates), but uses Qt (not JUCE) and targets a 2-track device.
+
+The recommended approach:
+
+1. **Fork westlicht/rc505-editor** for the JUCE UI shell, property system, audio engine, and look-and-feel.
+2. **Adopt the RC-500 editor's data architecture pattern**: Parse XML into a JSON intermediate representation using positional mapping tables, then use templates for serialization back to XML. This is far more maintainable than hardcoding 25,000+ lines of property definitions in C++.
+3. **Build the mk2 data model as mapping tables** rather than C++ class hierarchies:
+   - A JSON/YAML schema file defining each section's tag-to-parameter mapping, value ranges, and display types
+   - A generic parser that reads the schema and the RC0 file, producing an in-memory property tree
+   - Template-based serialization for writing back
+4. **Decode the format incrementally**: Start with the well-understood sections (TRACK, MASTER, REC, PLAY, RHYTHM, NAME) and add FX support progressively.
+
+### Phased Implementation
+
+| Phase | Scope | Prerequisite |
+|-------|-------|-------------|
+| **1: Format mapping** | Complete positional tag → parameter mapping for all `<mem>` sections using Parameter Guide | Parameter Guide (available) |
+| **2: Core editor** | Read/write memory settings (no FX). Patch browser, name editor, track/master/rec/play/rhythm settings | Phase 1 + full device dump |
+| **3: FX support** | Input FX and Track FX editing (70+ types × 4 banks × 4 slots) | Phase 2 |
+| **4: Audio** | WAV import/export with correct format (32-bit float, padding) | WAV file samples from device |
+| **5: System settings** | System.RC0 editing | System dump |
+| **6: Advanced** | Mixer, routing, EQ, step sequencer editing, playback engine | Phases 2-5 |
+
+---
+
+## 6. Existing Community Landscape
 
 | Tool | Device | Open Source | Status |
 |------|--------|------------|--------|
-| [westlicht/rc505-editor](https://github.com/westlicht/rc505-editor) | RC-505 (original) | Yes (GPLv3) | Beta, unmaintained |
-| [rc600editor.com](https://rc600editor.com/) | RC-505 mk2, RC-600 | No (commercial) | Active, paid |
-| [dfleury2/boss-rc500-editor](https://github.com/dfleury2/boss-rc500-editor) | RC-500 | Yes | Active |
-| BOSS Tone Studio | RC-505 mk2 | No (official) | Backup/restore only |
+| [westlicht/rc505-editor](https://github.com/westlicht/rc505-editor) | RC-505 (original) | Yes (GPLv3) | Beta, unmaintained since 2019 |
+| [rc600editor.com](https://rc600editor.com/) | RC-505 mk2, RC-600 | No (commercial) | Active, paid ($15) |
+| [dfleury2/boss-rc500-editor](https://github.com/dfleury2/boss-rc500-editor) | RC-500 | Yes (MIT) | Active |
+| BOSS Tone Studio | RC-505 mk2 | No (official) | Backup/restore only, no editing |
 
-There is currently **no open-source editor for the RC-505 mk2**. This represents a real gap in the community tooling — the only option is the paid rc600editor.com or the limited official BOSS Tone Studio.
+There is currently **no open-source editor for the RC-505 mk2**. The rc600editor.com developer has noted that "the RC-505mk2 uses different nodes than the RC-600 for the same controls in its assigns source and target values" — confirming that even between the two newest-generation devices, the positional mappings differ.
 
 ---
 
-## 8. Conclusion
+## 7. Conclusion
 
-Extending rc505-editor for the mk2 is feasible — the application architecture is appropriate and roughly half the code is reusable. However, the scope is substantial: the XML schema is completely different, the audio format requires changes, the effects system has nearly doubled, and the format must be reverse-engineered from actual hardware. The project is better characterized as "building a mk2 editor using the rc505-editor as a foundation" than as "adding mk2 support." The first prerequisite is obtaining RC0 file dumps from an actual RC-505 mk2 unit.
+The mk2's format is **more different from the original RC-505 than initially expected**. The shift to positional single-letter tags, the 3-element-per-memory structure, and the 30× increase in per-memory data (860 → 25,500 lines) mean this is not a "remap the tag names" exercise — it's a fundamentally different data architecture that requires a new parser, new mapping tables, and a new serialization strategy.
+
+However, the format is **regular and predictable**: sections are cleanly separated, values are plain integers, the FX structure is systematically repeated across all banks/slots, and the Parameter Guide provides the mapping key. An editor built on data-driven mapping tables (rather than hardcoded C++ property classes) could support the mk2 with a manageable schema file, and could later be extended to other Boss loopers by swapping schemas.
+
+**Next step**: Obtain a full device dump (all RC0 files + at least one WAV) from your RC-505 mk2 to complete the format mapping and begin implementation.
