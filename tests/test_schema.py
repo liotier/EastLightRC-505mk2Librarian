@@ -66,6 +66,8 @@ class TestSchemaRegistry:
             "TRACK", "NAME", "MASTER", "REC", "PLAY", "RHYTHM",
             "ASSIGN", "INPUT", "OUTPUT", "ROUTING", "MIXER", "EQ",
             "MASTER_FX", "FX_SETUP", "FX_SLOT", "FIXED_VALUE",
+            "ICTL", "ECTL", "SETUP", "COLOR", "USB", "MIDI", "PREF",
+            "FX_SUBSLOT",
         ]
         for section_type in expected_types:
             assert registry.get(section_type) is not None, (
@@ -86,6 +88,15 @@ class TestSchemaRegistry:
         # EQ instances
         for name in ["EQ_MIC1", "EQ_MIC2", "EQ_INST1L", "EQ_MAINOUTL", "EQ_SUBOUT2R"]:
             assert registry.get(name) is not None
+        # ICTL instances
+        assert registry.get("ICTL1_TRACK1_FX") is not None
+        assert registry.get("ICTL3_PEDAL9") is not None
+        # ECTL instances
+        assert registry.get("ECTL_CTL1") is not None
+        assert registry.get("ECTL_EXP2") is not None
+        # FX sub-slot instances
+        assert registry.get("AA") is not None
+        assert registry.get("DD") is not None
 
     def test_schema_field_counts(self) -> None:
         """Each schema must have the expected number of fields."""
@@ -97,9 +108,21 @@ class TestSchemaRegistry:
             "PLAY": 8, "RHYTHM": 13, "ASSIGN": 10, "INPUT": 13,
             "OUTPUT": 4, "ROUTING": 19, "MIXER": 22, "EQ": 12,
             "MASTER_FX": 3, "FX_SETUP": 1, "FX_SLOT": 3, "FIXED_VALUE": 2,
+            "ICTL": 3, "ECTL": 4, "SETUP": 22, "COLOR": 5,
+            "USB": 5, "MIDI": 10, "PREF": 14, "FX_SUBSLOT": 4,
         }
         for section_type, count in expected.items():
             schema = registry.get(section_type)
             assert len(schema.fields) == count, (
                 f"{section_type}: expected {count} fields, got {len(schema.fields)}"
             )
+
+    def test_midi_skips_tag_b(self) -> None:
+        """MIDI schema correctly handles non-contiguous tags (skips B)."""
+        schema_dir = Path(__file__).parent.parent / "src" / "eastlight" / "schema"
+        schema = load_schema_from_yaml(schema_dir / "midi.yaml")
+        assert "A" in schema.fields
+        assert "B" not in schema.fields  # MIDI skips tag B
+        assert "C" in schema.fields
+        assert schema.fields["A"].name == "rx_ch"
+        assert schema.fields["C"].name == "tx_ch"

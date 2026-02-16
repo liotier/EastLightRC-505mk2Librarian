@@ -696,18 +696,150 @@ As of the current iteration, YAML schemas cover all primary memory-level section
 | fx_slot.yaml | A-D (in ifx/tfx) | 3 (A-C) | Medium — sw/mode/type reasonable |
 | fixed_value.yaml | FIXED_VALUE | 2 (A-B) | Low — always 0/1, purpose unknown |
 
+**Now mapped (second iteration):**
+
+| Schema | Instances | Fields | Confidence |
+|--------|-----------|--------|------------|
+| ictl.yaml | 47 ICTL sections | 3 (A-C) | High — function enum index + mode |
+| ectl.yaml | 6 ECTL sections | 4 (A-D) | High — function + range/mode |
+| setup.yaml | SETUP (system) | 22 (A-V) | Medium for A-I, low for J-V |
+| color.yaml | COLOR (system) | 5 (A-E) | High — one color per track |
+| usb.yaml | USB (system) | 5 (A-E) | High — clean guide match |
+| midi.yaml | MIDI (system) | 10 (A,C-K) | Medium — note: skips tag B |
+| pref.yaml | PREF (system) | 14 (A-N) | High — SYSTEM/MEMORY toggles |
+| fx_subslot.yaml | 16 sub-slots | 4 (A-D) | Medium — sw + fx_type identified |
+
 **Remaining to map:**
-- ICTL/ECTL controller sections (3-4 fields each, large function enums from Parameter Guide pages 14-21)
-- SYSTEM-specific: SETUP (22 fields), COLOR (5), USB (5), MIDI (10 — note: skips field B), PREF (14)
-- 66 IFX + 70 TFX effect type parameter sets (Parameter Guide pages 33-41)
+- 66 IFX + 70 TFX effect type parameter sets (see Section 8.12 for complete field-count table)
+- CTL FUNC enum values (200+ entries, Parameter Guide pages 14-21) — needed for ICTL/ECTL display
+- SETUP fields J-V (13 of 22 fields unidentified)
 
-### 8.11 Open Questions
+### 8.11 FX Type Parameter Reference
 
-**Format (remaining ~5%):**
-- 66 IFX + 70 TFX type parameter sets — each effect type has its own fields (Parameter Guide pages 33-41)
-- ICTL/ECTL — internal/external control section mappings (large function enums)
-- SYSTEM-specific sections: SETUP, COLOR, USB, MIDI (note: skips field B), PREF
-- MIDI section uses non-contiguous field tags (A, C, D, ... skipping B) — parser handles this correctly but schemas must not assume sequential tags
+Each FX type is stored in sections named `{slot}{subslot}_{TYPE}` (e.g., `AA_LPF`, `BD_REVERB`).
+There are 4 slots × 4 sub-slots = 16 instances of each type in both IFX and TFX elements.
+
+**Field counts verified from device dump, parameter names from Parameter Guide pages 33-41:**
+
+#### Filter Effects
+| Type | Fields | Parameters (A, B, C, ...) |
+|------|--------|---------------------------|
+| LPF | 5 | RATE, DEPTH, D.LEVEL, E.LEVEL, STEP RATE |
+| LPF_SEQ | 22 | RATE, DEPTH, D.LEVEL, E.LEVEL, STEP RATE, MODE, STEP1-16 |
+| BPF | 5 | RATE, DEPTH, D.LEVEL, E.LEVEL, STEP RATE |
+| BPF_SEQ | 22 | RATE, DEPTH, D.LEVEL, E.LEVEL, STEP RATE, MODE, STEP1-16 |
+| HPF | 5 | RATE, DEPTH, D.LEVEL, E.LEVEL, STEP RATE |
+| HPF_SEQ | 22 | RATE, DEPTH, D.LEVEL, E.LEVEL, STEP RATE, MODE, STEP1-16 |
+
+#### Modulation Effects
+| Type | Fields | Parameters |
+|------|--------|------------|
+| PHASER | 8 | RATE, DEPTH, RESONANCE, MANUAL, E.LEVEL, D.LEVEL, STEP RATE, TYPE |
+| PHASER_SEQ | 22 | (base + MODE + STEP1-16) |
+| FLANGER | 8 | RATE, DEPTH, RESONANCE, MANUAL, E.LEVEL, D.LEVEL, STEP RATE, LOW CUT |
+| FLANGER_SEQ | 22 | (base + MODE + STEP1-16) |
+| CHORUS | 6 | RATE, DEPTH, D.LEVEL, LOW CUT, HIGH CUT, E.LEVEL |
+| TREMOLO | 6 | RATE, DEPTH, D.LEVEL, E.LEVEL, WAVE, STEP RATE |
+| TREMOLO_SEQ | 22 | (base + MODE + STEP1-16) |
+| VIBRATO | 6 | RATE, DEPTH, D.LEVEL, E.LEVEL, TRIGGER, STEP RATE |
+| VIBRATO_SEQ | 22 | (base + MODE + STEP1-16) |
+| AUTO_PAN | 6 | RATE, DEPTH, D.LEVEL, E.LEVEL, WAVE, STEP RATE |
+| MANUAL_PAN | 4 | POSITION, D.LEVEL, E.LEVEL, STEP RATE |
+| MANUAL_PAN_SEQ | 22 | (base + MODE + STEP1-16) |
+| STEREO_ENHANCE | 4 | WIDTH, D.LEVEL, E.LEVEL, PAN |
+
+#### Synth / Voice Effects
+| Type | Fields | Parameters |
+|------|--------|------------|
+| SYNTH | 8 | WAVE, CUTOFF, RESONANCE, SENS, ATTACK, DECAY, BALANCE, E.LEVEL |
+| SYNTH_SEQ | 22 | (base + MODE + STEP1-16) |
+| ROBOT | 5 | PITCH, NOTE, GENDER, BALANCE, E.LEVEL |
+| ELECTRIC | 4 | PITCH, FORMANT, BALANCE, E.LEVEL |
+| VOCODER | 6 | CARRIER, SENS, ATTACK, BALANCE, E.LEVEL, MIC SENS |
+| OSC_VOCODER | 6 | WAVE, PITCH, SENS, ATTACK, BALANCE, E.LEVEL |
+| OSC_BOT | 6 | WAVE, PITCH, CUTOFF, RESONANCE, BALANCE, E.LEVEL |
+| OSC_BOT_SEQ | 22 | (base + MODE + STEP1-16) |
+| HARMONIST_MANUAL | 7 | HARMONY, KEY, D.LEVEL, E.LEVEL, LEVEL, PRE DELAY, LOW CUT |
+| HARMONIST_AUTO | 7 | KEY, HARMONY, D.LEVEL, E.LEVEL, LEVEL, PRE DELAY, LOW CUT |
+
+#### Pitch / Guitar Effects
+| Type | Fields | Parameters |
+|------|--------|------------|
+| TRANSPOSE | 5 | PITCH, FINE, BALANCE, D.LEVEL, E.LEVEL |
+| TRANSPOSE_SEQ | 22 | (base + MODE + STEP1-16) |
+| PITCH_BEND | 5 | PITCH, FINE, RISE TIME, D.LEVEL, E.LEVEL |
+| PITCH_BEND_SEQ | 22 | (base + MODE + STEP1-16) |
+| OCTAVE | 5 | RANGE, OCT LEVEL, D.LEVEL, E.LEVEL, STEP RATE |
+| OCTAVE_SEQ | 22 | (base + MODE + STEP1-16) |
+| AUTO_RIFF | 6 | TYPE, KEY, SENS, ATTACK, D.LEVEL, E.LEVEL |
+| G2B | 4 | OCTAVE, TONE, D.LEVEL, E.LEVEL |
+| SUSTAINER | 4 | LEVEL, ATTACK, D.LEVEL, E.LEVEL |
+| SLOW_GEAR | 4 | SENS, RISE TIME, D.LEVEL, E.LEVEL |
+
+#### Dynamics / Amp
+| Type | Fields | Parameters |
+|------|--------|------------|
+| PREAMP | 12 | TYPE, GAIN, BASS, MIDDLE, TREBLE, PRESENCE, BRIGHT, LEVEL, SP TYPE, MIC TYPE, MIC DIST, D.LEVEL |
+| DIST | 6 | TYPE, DRIVE, TONE, D.LEVEL, E.LEVEL, BOTTOM |
+| DYNAMICS | 5 | TYPE, ATTACK, RELEASE, D.LEVEL, E.LEVEL |
+| EQ | 8 | LOW GAIN, LOW MID FREQ, LOW MID Q, LOW MID GAIN, HI MID FREQ, HI MID Q, HI MID GAIN, HIGH GAIN |
+| ISOLATOR | 5 | LOW, MID, HIGH, D.LEVEL, E.LEVEL |
+| ISOLATOR_SEQ | 22 | (base + MODE + STEP1-16) |
+
+#### Delay / Time Effects
+| Type | Fields | Parameters |
+|------|--------|------------|
+| DELAY | 6 | TIME, FEEDBACK, E.LEVEL, D.LEVEL, LOW CUT, HIGH CUT |
+| PANNING_DELAY | 8 | TIME, FEEDBACK, E.LEVEL, D.LEVEL, LOW CUT, HIGH CUT, PAN L, PAN R |
+| REVERSE_DELAY | 6 | TIME, FEEDBACK, E.LEVEL, D.LEVEL, LOW CUT, HIGH CUT |
+| MOD_DELAY | 8 | TIME, FEEDBACK, E.LEVEL, D.LEVEL, LOW CUT, HIGH CUT, RATE, DEPTH |
+| TAPE_ECHO | 7 | TIME, FEEDBACK, E.LEVEL, D.LEVEL, LOW CUT, HIGH CUT, WOW/FLUTTER |
+| TAPE_ECHO_V505V2 | 7 | (variant of TAPE_ECHO) |
+| GRANULAR_DELAY | 6 | TIME, FEEDBACK, E.LEVEL, D.LEVEL, GRAIN, BALANCE |
+| WARP | 5 | TIME, FEEDBACK, E.LEVEL, D.LEVEL, RISE TIME |
+| TWIST | 5 | TIME, FEEDBACK, E.LEVEL, D.LEVEL, RISE TIME |
+| ROLL | 4 | TIME, FEEDBACK, E.LEVEL, D.LEVEL |
+| ROLL_V505V2 | 4 | (variant of ROLL) |
+| FREEZE | 3 | E.LEVEL, D.LEVEL, MODE |
+
+#### Reverb Effects
+| Type | Fields | Parameters |
+|------|--------|------------|
+| REVERB | 7 | TIME, PRE DELAY, DENSITY, D.LEVEL, LOW CUT, HIGH CUT, E.LEVEL |
+| GATE_REVERB | 6 | TIME, PRE DELAY, D.LEVEL, LOW CUT, HIGH CUT, E.LEVEL |
+| REVERSE_REVERB | 6 | TIME, PRE DELAY, D.LEVEL, LOW CUT, HIGH CUT, E.LEVEL |
+
+#### Slicer Effects
+| Type | Fields | Parameters |
+|------|--------|------------|
+| PATTERN_SLICER | 6 | PATTERN, RATE, D.LEVEL, E.LEVEL, ATTACK, TIMING |
+| STEP_SLICER | 22 | RATE, D.LEVEL, E.LEVEL, ATTACK, TIMING, MODE, STEP1-16 |
+
+#### Other Effects
+| Type | Fields | Parameters |
+|------|--------|------------|
+| LOFI | 4 | BIT, SAMPLE RATE, D.LEVEL, E.LEVEL |
+| RADIO | 4 | FREQUENCY, D.LEVEL, E.LEVEL, NOISE |
+| RING_MODULATOR | 6 | FREQUENCY, BALANCE, D.LEVEL, E.LEVEL, SENS, STEP RATE |
+| RING_MODULATOR_SEQ | 22 | (base + MODE + STEP1-16) |
+
+#### TFX-Exclusive Effects
+| Type | Fields | Parameters |
+|------|--------|------------|
+| BEAT_SCATTER | 2 | TYPE, LENGTH |
+| BEAT_REPEAT | 2 | TYPE, LENGTH |
+| BEAT_SHIFT | 2 | TYPE, SHIFT |
+| VINYL_FLICK | 1 | FLICK |
+
+**Summary:** 66 shared IFX/TFX types + 4 TFX-exclusive = 70 total. Field counts range from 1 (VINYL_FLICK) to 22 (_SEQ variants with 16 step sequencer values). The _SEQ pattern is consistent: 6 header params + 16 step values.
+
+### 8.12 Open Questions
+
+**Format (remaining ~2%):**
+- CTL FUNC enum (200+ entries, Parameter Guide pages 14-21) — function indices are stored in ICTL/ECTL fields but display names not yet transcribed
+- SETUP fields J-V (13 of 22 system SETUP fields have unknown purpose — likely internal state: counters, timers, calibration)
+- MIDI sync_source field (E=9 in dump) doesn't match expected 2-value USB/MIDI enum — may be a channel or combined encoding
+- Exact FX type index → name mapping for FX_SLOT.fx_type and FX_SUBSLOT.fx_type fields
 
 **Device behavior (need empirical testing):**
 - Does the device validate the count footer? (What if the value is wrong?)

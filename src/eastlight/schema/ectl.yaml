@@ -1,0 +1,33 @@
+section: ECTL
+instances:
+  - "ECTL_CTL1"
+  - "ECTL_CTL2"
+  - "ECTL_CTL3"
+  - "ECTL_CTL4"
+  - "ECTL_EXP1"
+  - "ECTL_EXP2"
+fields:
+  A:
+    name: ctl_func
+    type: int
+    range: [0, 300]
+    default: 0
+    display: "CTL Function"
+  B:
+    name: ctl_func_secondary
+    type: int
+    range: [0, 300]
+    default: 0
+    display: "Secondary Function"
+  C:
+    name: reserved_c
+    type: int
+    default: 0
+    display: "(reserved)"
+    read_only: true
+  D:
+    name: ctl_range
+    type: int
+    range: [0, 127]
+    default: 1
+    display: "Range / Mode"
