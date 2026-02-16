@@ -4,8 +4,8 @@ The RC-505 MK2 stores audio as 32-bit IEEE Float, stereo, 44.1kHz WAV.
 
 Import: accepts WAV/FLAC/OGG (anything soundfile/libsndfile supports),
     converts to the device's required format.
-Export: default is 24-bit PCM WAV for universal compatibility; native
-    32-bit float and 16-bit PCM also available.
+Export: default is native 32-bit float WAV (bit-for-bit lossless,
+    safe for roundtrips). 24-bit and 16-bit PCM available for sharing.
 """
 
 from __future__ import annotations
@@ -26,8 +26,8 @@ DEVICE_SUBTYPE = "FLOAT"  # 32-bit IEEE float
 class ExportFormat(Enum):
     """Audio export format options."""
 
-    PCM_24 = "PCM_24"  # 24-bit PCM WAV — universal compatibility (default)
-    FLOAT_32 = "FLOAT"  # 32-bit float WAV — native device format
+    FLOAT_32 = "FLOAT"  # 32-bit float WAV — native device format, lossless (default)
+    PCM_24 = "PCM_24"  # 24-bit PCM WAV — universal DAW/player compatibility
     PCM_16 = "PCM_16"  # 16-bit PCM WAV — maximum compatibility, smallest files
 
 
@@ -104,19 +104,19 @@ def wav_export(
     path: str | Path,
     data: np.ndarray,
     sample_rate: int = DEVICE_SAMPLE_RATE,
-    fmt: ExportFormat = ExportFormat.PCM_24,
+    fmt: ExportFormat = ExportFormat.FLOAT_32,
 ) -> None:
     """Export audio data to WAV in the user's chosen format.
 
-    Default is 24-bit PCM for universal compatibility (all DAWs including
-    Logic Pro, all media players, all hardware). No quality loss for audio
-    at or below 0 dBFS.
+    Default is native 32-bit float — bit-for-bit lossless, safe for
+    roundtrips (export → edit → re-import). Use PCM_24 when exporting
+    for sharing or for DAWs that reject float WAV (e.g. Logic Pro).
 
     Args:
         path: Output path.
         data: Audio data as numpy array.
         sample_rate: Sample rate.
-        fmt: Export format (default: 24-bit PCM).
+        fmt: Export format (default: native 32-bit float).
     """
     sf.write(str(path), data, sample_rate, subtype=fmt.value)
 

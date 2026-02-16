@@ -375,7 +375,7 @@ A fresh implementation is the right approach. Forking a C++/JUCE editor and retr
 1. **Schema-driven data model**: YAML files define each section's tag → parameter mapping, value ranges, and display types. The parser is generic; adding support for new sections or fixing mappings means editing YAML, not code.
 2. **Regex-based RC0 parser**: Handles Roland's non-standard XML (tags like `<0>`, `<#>`) that break all standard XML parsers.
 3. **Multi-file architecture**: 198 individual memory files with A/B backup pairs, not one monolithic file.
-4. **Audio format conversion**: Import from WAV/FLAC/OGG/MP3, export to 24-bit PCM WAV (standard) or native 32-bit float WAV. Internal device format is 32-bit IEEE Float, stereo, 44.1kHz.
+4. **Audio format conversion**: Import from WAV/FLAC/OGG/MP3, export defaults to native 32-bit float WAV (lossless roundtrips) with 24-bit and 16-bit PCM options for sharing. Internal device format is 32-bit IEEE Float, stereo, 44.1kHz.
 5. **Core library with no UI dependencies**: `eastlight.core` supports scripting, CLI, and GUI equally.
 
 ---
@@ -617,7 +617,7 @@ The RC-505 MK2 stores audio as **32-bit IEEE Float, stereo, 44.1kHz WAV**. This 
 - Update TRACK metadata (X=total_samples, V=samples_per_measure, S=loop_length, W=1, Y=1)
 
 **Export** (device audio → user's preferred format):
-- **Default: 24-bit PCM WAV** — universal compatibility with all DAWs (including Logic Pro), media players, and hardware. No quality loss for any audio at or below 0 dBFS (144 dB dynamic range vs 32-bit float's theoretical 1528 dB — irrelevant for recorded audio).
-- **Optional: 32-bit float WAV (native)** — exact bit-for-bit copy from device. Useful for archival or importing into DAWs that handle float natively (Reaper, Audacity, Pro Tools).
+- **Default: 32-bit float WAV (native)** — bit-for-bit lossless copy from device. Safe for roundtrips: export → edit in DAW → re-import loses nothing. Works in Reaper, Audacity, Pro Tools, FL Studio, and most modern DAWs.
+- **Optional: 24-bit PCM WAV** — for sharing or for DAWs that reject float WAV (Logic Pro, some Ableton configurations). Technically lossy (truncates mantissa beyond 24 bits), but inaudible for any real-world audio at or below 0 dBFS. **Not safe for lossless roundtrips** — a 32→24→32 cycle introduces quantization noise at ~-144 dBFS.
 - **Optional: 16-bit PCM WAV** — maximum compatibility with legacy hardware and smaller file sizes (half the size of 32-bit float). Applies dithering for the 32→16 bit conversion.
 - File size comparison for a 30-second stereo track at 44.1kHz: 32-bit float = 10.6 MB, 24-bit = 7.9 MB, 16-bit = 5.3 MB.
