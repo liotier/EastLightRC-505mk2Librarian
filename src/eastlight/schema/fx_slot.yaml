@@ -1,0 +1,22 @@
+section: FX_SLOT
+instances: ["A", "B", "C", "D"]
+fields:
+  A:
+    name: sw
+    type: bool
+    default: 1
+    display: "Switch"
+  B:
+    name: mode
+    type: enum
+    default: 1
+    display: "Mode"
+    choices:
+      0: "MOMENT"
+      1: "TOGGLE"
+  C:
+    name: fx_type
+    type: int
+    range: [0, 70]
+    default: 0
+    display: "FX Type"

@@ -85,6 +85,107 @@ class TestMemory:
         assert "MASTER" in names
         assert "SETUP" in names  # from ifx/tfx
 
+    def test_master_schema_resolution(self, sample_rc0_path: Path, registry: SchemaRegistry) -> None:
+        rc0 = parse_memory_file(sample_rc0_path)
+        mem = Memory(rc0, registry)
+        master = mem.section("MASTER")
+        assert master is not None
+        assert master.get_by_name("tempo_x10") is not None
+        d = master.as_dict()
+        assert "tempo_x10" in d
+        assert "samples_per_measure" in d
+
+
+class TestSchemaResolution:
+    """Schema resolution tests against real device dump."""
+
+    @pytest.fixture
+    def real_mem(self, registry: SchemaRegistry) -> Memory:
+        dump_path = Path("/tmp/rc505-dump/ROLAND/DATA/MEMORY001A.RC0")
+        if not dump_path.exists():
+            pytest.skip("Device dump not available")
+        rc0 = parse_memory_file(dump_path)
+        return Memory(rc0, registry)
+
+    def test_rec_schema(self, real_mem: Memory) -> None:
+        rec = real_mem.section("REC")
+        assert rec is not None
+        d = rec.as_dict()
+        assert "rec_action" in d
+        assert "quantize" in d
+        assert "auto_rec_sens" in d
+
+    def test_eq_schema(self, real_mem: Memory) -> None:
+        eq = real_mem.section("EQ_MIC1")
+        assert eq is not None
+        d = eq.as_dict()
+        assert "sw" in d
+        assert "lo_gain" in d
+        assert "hi_mid_freq" in d
+
+    def test_assign_schema(self, real_mem: Memory) -> None:
+        assign1 = real_mem.section("ASSIGN1")
+        assert assign1 is not None
+        d = assign1.as_dict()
+        assert "sw" in d
+        assert "source" in d
+        assert "target" in d
+
+    def test_master_schema(self, real_mem: Memory) -> None:
+        master = real_mem.section("MASTER")
+        assert master is not None
+        d = master.as_dict()
+        assert "tempo_x10" in d
+        assert d["tempo_x10"] == 700
+
+    def test_play_schema(self, real_mem: Memory) -> None:
+        play = real_mem.section("PLAY")
+        assert play is not None
+        d = play.as_dict()
+        assert "single_play_change" in d
+        assert "fade_time_in" in d
+
+    def test_rhythm_schema(self, real_mem: Memory) -> None:
+        rhythm = real_mem.section("RHYTHM")
+        assert rhythm is not None
+        d = rhythm.as_dict()
+        assert "pattern" in d
+        assert "variation" in d
+
+    def test_mixer_schema(self, real_mem: Memory) -> None:
+        mixer = real_mem.section("MIXER")
+        assert mixer is not None
+        d = mixer.as_dict()
+        assert "mic1_level" in d
+        assert "master_out" in d
+
+    def test_routing_schema(self, real_mem: Memory) -> None:
+        routing = real_mem.section("ROUTING")
+        assert routing is not None
+        d = routing.as_dict()
+        assert "main_l_tracks" in d
+        assert "phones_monitor" in d
+
+    def test_output_schema(self, real_mem: Memory) -> None:
+        output = real_mem.section("OUTPUT")
+        assert output is not None
+        d = output.as_dict()
+        assert "output_knob" in d
+        assert "stereo_link_main" in d
+
+    def test_input_schema(self, real_mem: Memory) -> None:
+        inp = real_mem.section("INPUT")
+        assert inp is not None
+        d = inp.as_dict()
+        assert "gain_mic1" in d
+
+    def test_master_fx_schema(self, real_mem: Memory) -> None:
+        mfx = real_mem.section("MASTER_FX")
+        assert mfx is not None
+        d = mfx.as_dict()
+        assert "comp" in d
+        assert "reverb" in d
+
 
 class TestUndoRedo:
     def test_undo_reverts_value(self, sample_rc0_path: Path, registry: SchemaRegistry) -> None:

@@ -1,0 +1,63 @@
+section: ASSIGN
+instances: ["ASSIGN1", "ASSIGN2", "ASSIGN3", "ASSIGN4", "ASSIGN5", "ASSIGN6", "ASSIGN7", "ASSIGN8", "ASSIGN9", "ASSIGN10", "ASSIGN11", "ASSIGN12", "ASSIGN13", "ASSIGN14", "ASSIGN15", "ASSIGN16"]
+fields:
+  A:
+    name: sw
+    type: bool
+    default: 0
+    display: "Switch"
+  B:
+    name: source
+    type: int
+    range: [0, 255]
+    default: 0
+    display: "Source"
+  C:
+    name: target
+    type: int
+    range: [0, 255]
+    default: 0
+    display: "Target"
+  D:
+    name: source_mode
+    type: enum
+    default: 0
+    display: "Source Mode"
+    choices:
+      0: "MOMENT"
+      1: "TOGGLE"
+  E:
+    name: act_lo
+    type: int
+    range: [0, 127]
+    default: 0
+    display: "Act Range Lo"
+  F:
+    name: act_hi
+    type: int
+    range: [0, 127]
+    default: 127
+    display: "Act Range Hi"
+  G:
+    name: target_min
+    type: int
+    range: [0, 255]
+    default: 0
+    display: "Target Min"
+  H:
+    name: target_max
+    type: int
+    range: [0, 255]
+    default: 127
+    display: "Target Max"
+  I:
+    name: int_pedal_tgt
+    type: int
+    range: [0, 255]
+    default: 0
+    display: "Int Pedal Target"
+  J:
+    name: int_pedal_mode
+    type: bool
+    default: 0
+    display: "Int Pedal Mode"

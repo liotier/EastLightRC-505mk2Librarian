@@ -1,0 +1,76 @@
+section: RHYTHM
+instances: ["RHYTHM"]
+fields:
+  A:
+    name: pattern
+    type: int
+    range: [0, 285]
+    default: 19
+    display: "Pattern"
+  B:
+    name: beat
+    type: int
+    range: [0, 20]
+    default: 4
+    display: "Beat"
+  C:
+    name: variation
+    type: enum
+    default: 0
+    display: "Variation"
+    choices:
+      0: "A"
+      1: "B"
+  D:
+    name: kit
+    type: int
+    range: [0, 16]
+    default: 0
+    display: "Kit"
+  E:
+    name: level
+    type: int
+    range: [0, 200]
+    default: 0
+    display: "Level"
+  F:
+    name: fill
+    type: int
+    range: [0, 10]
+    default: 2
+    display: "Fill"
+  G:
+    name: part1
+    type: bool
+    default: 1
+    display: "Part 1"
+  H:
+    name: part2
+    type: bool
+    default: 0
+    display: "Part 2"
+  I:
+    name: part3
+    type: bool
+    default: 0
+    display: "Part 3"
+  J:
+    name: part4
+    type: bool
+    default: 0
+    display: "Part 4"
+  K:
+    name: intro_rec
+    type: bool
+    default: 0
+    display: "Intro Rec"
+  L:
+    name: intro_play
+    type: bool
+    default: 1
+    display: "Intro Play"
+  M:
+    name: ending
+    type: bool
+    default: 1
+    display: "Ending"

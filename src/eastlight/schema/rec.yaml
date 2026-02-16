@@ -1,0 +1,49 @@
+section: REC
+instances: ["REC"]
+fields:
+  A:
+    name: rec_action
+    type: enum
+    default: 0
+    display: "Rec Action"
+    choices:
+      0: "REC→DUB"
+      1: "REC→PLAY"
+  B:
+    name: quantize
+    type: enum
+    default: 0
+    display: "Quantize"
+    choices:
+      0: "OFF"
+      1: "MEASURE (LOOP)"
+      2: "MEASURE (FREE)"
+      3: "BEAT"
+  C:
+    name: auto_rec
+    type: bool
+    default: 0
+    display: "Auto Rec"
+  D:
+    name: auto_rec_sens
+    type: int
+    range: [1, 100]
+    default: 50
+    display: "Auto Rec Sens"
+  E:
+    name: auto_rec_src
+    type: enum
+    default: 0
+    display: "Auto Rec Source"
+    choices:
+      0: "ALL"
+      1: "MIC 1,2"
+      2: "INST 1"
+      3: "INST 2"
+  F:
+    name: loop_length
+    type: int
+    range: [0, 100]
+    default: 0
+    display: "Loop Length"
+    unit: "measures"

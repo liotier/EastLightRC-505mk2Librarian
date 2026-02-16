@@ -1,0 +1,120 @@
+section: ROUTING
+instances: ["ROUTING"]
+fields:
+  A:
+    name: main_l_tracks
+    type: int
+    range: [0, 63]
+    default: 63
+    display: "Main L Tracks"
+  B:
+    name: main_r_tracks
+    type: int
+    range: [0, 63]
+    default: 63
+    display: "Main R Tracks"
+  C:
+    name: sub1_l_tracks
+    type: int
+    range: [0, 63]
+    default: 63
+    display: "Sub 1 L Tracks"
+  D:
+    name: sub1_r_tracks
+    type: int
+    range: [0, 63]
+    default: 63
+    display: "Sub 1 R Tracks"
+  E:
+    name: sub2_l_tracks
+    type: int
+    range: [0, 63]
+    default: 63
+    display: "Sub 2 L Tracks"
+  F:
+    name: sub2_r_tracks
+    type: int
+    range: [0, 63]
+    default: 63
+    display: "Sub 2 R Tracks"
+  G:
+    name: phones_l_tracks
+    type: int
+    range: [0, 63]
+    default: 63
+    display: "Phones L Tracks"
+  H:
+    name: phones_r_tracks
+    type: int
+    range: [0, 63]
+    default: 63
+    display: "Phones R Tracks"
+  I:
+    name: main_inputs
+    type: int
+    range: [0, 127]
+    default: 127
+    display: "Main Inputs"
+  J:
+    name: sub1_inputs
+    type: int
+    range: [0, 127]
+    default: 63
+    display: "Sub 1 Inputs"
+  K:
+    name: sub2_inputs
+    type: int
+    range: [0, 127]
+    default: 127
+    display: "Sub 2 Inputs"
+  L:
+    name: phones_inputs
+    type: int
+    range: [0, 127]
+    default: 63
+    display: "Phones Inputs"
+  M:
+    name: loop_inputs
+    type: int
+    range: [0, 127]
+    default: 127
+    display: "Loop Inputs"
+  N:
+    name: rhythm_inputs
+    type: int
+    range: [0, 127]
+    default: 127
+    display: "Rhythm Inputs"
+  O:
+    name: phones_rhythm
+    type: bool
+    default: 0
+    display: "Phones Rhythm"
+  P:
+    name: rhythm_output
+    type: enum
+    default: 0
+    display: "Rhythm Output"
+    choices:
+      0: "OUTPUT"
+      1: "LOOP"
+  Q:
+    name: phones_out_sw
+    type: enum
+    default: 1
+    display: "Phones Out"
+    choices:
+      0: "MAIN"
+      1: "SUB1"
+      2: "SUB2"
+      3: "INDIVIDUAL"
+  R:
+    name: phones_monitor
+    type: bool
+    default: 0
+    display: "Phones Monitor"
+  S:
+    name: phones_monitor_mode
+    type: bool
+    default: 1
+    display: "Phones Monitor Mode"

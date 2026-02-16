@@ -1,0 +1,32 @@
+section: MASTER
+instances: ["MASTER"]
+fields:
+  A:
+    name: tempo_x10
+    type: int
+    range: [400, 3000]
+    default: 1200
+    display: "Tempo"
+    unit: "×0.1 BPM"
+  B:
+    name: samples_per_measure
+    type: int
+    range: [0, 10000000]
+    default: 0
+    display: "Samples/Measure"
+    computed: true
+    read_only: true
+  C:
+    name: dub_mode
+    type: enum
+    default: 0
+    display: "Dub Mode"
+    choices:
+      0: "OVERDUB"
+      1: "REPLACE"
+  D:
+    name: beat
+    type: int
+    range: [0, 20]
+    default: 8
+    display: "Beat"

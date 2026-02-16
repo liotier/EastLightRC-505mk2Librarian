@@ -1,0 +1,28 @@
+section: OUTPUT
+instances: ["OUTPUT"]
+fields:
+  A:
+    name: output_knob
+    type: enum
+    default: 0
+    display: "Output Knob"
+    choices:
+      0: "ALL"
+      1: "MASTER"
+      2: "PHONES"
+      3: "OFF"
+  B:
+    name: stereo_link_main
+    type: bool
+    default: 1
+    display: "Stereo Link Main"
+  C:
+    name: stereo_link_sub1
+    type: bool
+    default: 1
+    display: "Stereo Link Sub 1"
+  D:
+    name: stereo_link_sub2
+    type: bool
+    default: 1
+    display: "Stereo Link Sub 2"

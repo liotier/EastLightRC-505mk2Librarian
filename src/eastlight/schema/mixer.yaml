@@ -1,0 +1,135 @@
+section: MIXER
+instances: ["MIXER"]
+fields:
+  A:
+    name: mic1_level
+    type: int
+    range: [0, 200]
+    default: 100
+    display: "Mic 1 Level"
+  B:
+    name: mic1_pan
+    type: int
+    range: [0, 100]
+    default: 0
+    display: "Mic 1 Pan"
+  C:
+    name: mic2_level
+    type: int
+    range: [0, 200]
+    default: 100
+    display: "Mic 2 Level"
+  D:
+    name: mic2_pan
+    type: int
+    range: [0, 100]
+    default: 0
+    display: "Mic 2 Pan"
+  E:
+    name: inst1l_level
+    type: int
+    range: [0, 200]
+    default: 100
+    display: "Inst 1 L Level"
+  F:
+    name: inst1l_pan
+    type: int
+    range: [0, 100]
+    default: 0
+    display: "Inst 1 L Pan"
+  G:
+    name: inst1r_level
+    type: int
+    range: [0, 200]
+    default: 100
+    display: "Inst 1 R Level"
+  H:
+    name: inst1r_pan
+    type: int
+    range: [0, 100]
+    default: 0
+    display: "Inst 1 R Pan"
+  I:
+    name: inst2l_level
+    type: int
+    range: [0, 200]
+    default: 100
+    display: "Inst 2 L Level"
+  J:
+    name: inst2l_pan
+    type: int
+    range: [0, 100]
+    default: 0
+    display: "Inst 2 L Pan"
+  K:
+    name: inst2r_level
+    type: int
+    range: [0, 200]
+    default: 100
+    display: "Inst 2 R Level"
+  L:
+    name: inst2r_pan
+    type: int
+    range: [0, 100]
+    default: 0
+    display: "Inst 2 R Pan"
+  M:
+    name: main_out_l
+    type: int
+    range: [0, 200]
+    default: 100
+    display: "Main Out L"
+  N:
+    name: main_out_r
+    type: int
+    range: [0, 200]
+    default: 100
+    display: "Main Out R"
+  O:
+    name: sub1_out_l
+    type: int
+    range: [0, 200]
+    default: 100
+    display: "Sub 1 Out L"
+  P:
+    name: sub1_out_r
+    type: int
+    range: [0, 200]
+    default: 100
+    display: "Sub 1 Out R"
+  Q:
+    name: sub2_out_l
+    type: int
+    range: [0, 200]
+    default: 100
+    display: "Sub 2 Out L"
+  R:
+    name: sub2_out_r
+    type: int
+    range: [0, 200]
+    default: 100
+    display: "Sub 2 Out R"
+  S:
+    name: loop_out
+    type: int
+    range: [0, 200]
+    default: 100
+    display: "Loop Out"
+  T:
+    name: rhythm_out
+    type: int
+    range: [0, 200]
+    default: 100
+    display: "Rhythm Out"
+  U:
+    name: phones_out
+    type: int
+    range: [0, 200]
+    default: 67
+    display: "Phones Out"
+  V:
+    name: master_out
+    type: int
+    range: [0, 200]
+    default: 67
+    display: "Master Out"

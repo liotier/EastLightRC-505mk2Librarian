@@ -1,0 +1,9 @@
+section: FX_SETUP
+instances: ["SETUP"]
+fields:
+  A:
+    name: current_slot
+    type: int
+    range: [0, 3]
+    default: 0
+    display: "Current Slot"

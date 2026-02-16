@@ -661,17 +661,53 @@ However, the core API must be designed **with the GUI in mind**. Three capabilit
 2. **Undo/redo stack** — must live in the core library, not the GUI layer
 3. **Lazy loading** — don't parse all 99 memories on startup; load on demand with metadata caching
 
-### 8.9 Open Questions
+### 8.9 Drag-and-Drop as Core Interaction Pattern
+
+Drag-and-drop is a first-class interaction pattern in EastLight, not limited to WAV import/export:
+
+- **WAV files**: Drag WAV/FLAC/MP3 onto a track slot to import; drag a track to the desktop to export.
+- **Parameters**: Drag a parameter value from one track/memory to another to copy that setting.
+- **Memories**: Drag a memory slot to reorder, swap, or copy between slots.
+- **FX chains**: Drag effect slots to reorder within a chain, or between IFX/TFX buses.
+- **Templates**: Drag a saved template onto a memory to apply it.
+
+This maps naturally to PyQt6's `QDrag`/`QMimeData` system. Custom MIME types (`application/x-eastlight-memory`, `application/x-eastlight-param`, etc.) enable type-safe drag operations with visual feedback showing what will happen on drop.
+
+### 8.10 Schema Coverage
+
+As of the current iteration, YAML schemas cover all primary memory-level sections:
+
+| Schema | Instances | Fields | Confidence |
+|--------|-----------|--------|------------|
+| track.yaml | TRACK1-6 | 25 (A-Y) | High — verified against Parameter Guide |
+| name.yaml | NAME | 12 (A-L) | High — ASCII character codes |
+| master.yaml | MASTER | 4 (A-D) | High for A-B (tempo, samples), medium for C-D |
+| rec.yaml | REC | 6 (A-F) | High — Parameter Guide order matches |
+| play.yaml | PLAY | 8 (A-H) | Medium — D/E values need empirical verification |
+| rhythm.yaml | RHYTHM | 13 (A-M) | Medium — pattern/variation confident, beat/fill less so |
+| assign.yaml | ASSIGN1-16 | 10 (A-J) | High for A-H, medium for I-J |
+| input.yaml | INPUT | 13 (A-M) | Medium — gain fields (J-M) confident, others less so |
+| output.yaml | OUTPUT | 4 (A-D) | High — clean mapping to guide |
+| routing.yaml | ROUTING | 19 (A-S) | Medium — bitmask interpretation plausible |
+| mixer.yaml | MIXER | 22 (A-V) | Medium — level fields confident, pan fields speculative |
+| eq.yaml | EQ_MIC1..EQ_SUBOUT2R (12) | 12 (A-L) | High — clean mapping to 4-band parametric EQ |
+| master_fx.yaml | MASTER_FX | 3 (A-C) | Medium — comp/reverb confident |
+| fx_setup.yaml | SETUP (in ifx/tfx) | 1 (A) | Low — single field, purpose unclear |
+| fx_slot.yaml | A-D (in ifx/tfx) | 3 (A-C) | Medium — sw/mode/type reasonable |
+| fixed_value.yaml | FIXED_VALUE | 2 (A-B) | Low — always 0/1, purpose unknown |
+
+**Remaining to map:**
+- ICTL/ECTL controller sections (3-4 fields each, large function enums from Parameter Guide pages 14-21)
+- SYSTEM-specific: SETUP (22 fields), COLOR (5), USB (5), MIDI (10 — note: skips field B), PREF (14)
+- 66 IFX + 70 TFX effect type parameter sets (Parameter Guide pages 33-41)
+
+### 8.11 Open Questions
 
 **Format (remaining ~5%):**
-- REC (6 fields), PLAY (8 fields), RHYTHM (13 fields) — need Parameter Guide cross-reference
-- MASTER (4 fields) — only 2 observed values, need full mapping
-- ASSIGN fields A-J — partially decoded, need Parameter Guide
-- ROUTING (19 fields) — values 0/63/127 observed, likely a send matrix
-- ICTL/ECTL — internal/external control section mappings
-- INPUT/OUTPUT/MIXER/EQ — field-level mapping
-- SYSTEM-specific: SETUP (22 fields), COLOR (5), USB (5), MIDI (10), PREF (20)
 - 66 IFX + 70 TFX type parameter sets — each effect type has its own fields (Parameter Guide pages 33-41)
+- ICTL/ECTL — internal/external control section mappings (large function enums)
+- SYSTEM-specific sections: SETUP, COLOR, USB, MIDI (note: skips field B), PREF
+- MIDI section uses non-contiguous field tags (A, C, D, ... skipping B) — parser handles this correctly but schemas must not assume sequential tags
 
 **Device behavior (need empirical testing):**
 - Does the device validate the count footer? (What if the value is wrong?)
