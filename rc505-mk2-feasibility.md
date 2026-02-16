@@ -621,3 +621,60 @@ The RC-505 MK2 stores audio as **32-bit IEEE Float, stereo, 44.1kHz WAV**. This 
 - **Optional: 24-bit PCM WAV** — for sharing or for DAWs that reject float WAV (Logic Pro, some Ableton configurations). Technically lossy (truncates mantissa beyond 24 bits), but inaudible for any real-world audio at or below 0 dBFS. **Not safe for lossless roundtrips** — a 32→24→32 cycle introduces quantization noise at ~-144 dBFS.
 - **Optional: 16-bit PCM WAV** — maximum compatibility with legacy hardware and smaller file sizes (half the size of 32-bit float). Applies dithering for the 32→16 bit conversion.
 - File size comparison for a 30-second stereo track at 44.1kHz: 32-bit float = 10.6 MB, 24-bit = 7.9 MB, 16-bit = 5.3 MB.
+
+### 8.7 Competitive Baseline: rc600editor.com
+
+The commercial rc600editor.com ($15) defines what RC-505 MK2 users expect from an editor. Its feature set is the minimum viable bar:
+
+- **Memory manager**: drag-and-drop reorder, right-click rename/reset, batch copy/paste settings across memories
+- **WAV manager**: import/export/preview audio, auto-convert to device format, tempo detection
+- **Setlist manager**: organize memories for gigs with drag-and-drop
+- **Rhythm editor**: create custom drum beats (avoids Boss's clunky converter)
+- **One-click backup/restore** with selective restore
+- **WAV Studio**: basic audio editing (chop, fade, normalize, join)
+
+Boss Tone Studio (official) is universally disliked — described as "clunky", "not reliable", "just a file transfer tool", "designed for programming wonks, not musicians". This gap is why users pay for rc600editor.com. EastLight must match or exceed the commercial feature set while being free and open-source.
+
+Features EastLight should add beyond the current plan:
+- **Automatic backup before writes** — safety net for every destructive operation
+- **Copy/paste between memories** — the #1 workflow pain on the device itself
+- **Batch operations** — apply settings to multiple memories at once
+- **Setlist/tag organization** — reorder and tag memories for gigs
+- **Memory search/filter** — by name, tempo, track content, FX type
+- **A/B diff view** — compare live state vs backup
+- **Template system** — save and apply favorite patch configurations
+- **Storage space display** — show remaining SD card capacity
+- **Device auto-detection** — find ROLAND/ when device is USB-connected
+
+### 8.8 GUI Deferral
+
+The GUI (Phase 5) is deliberately deferred until the core library API has stabilized. Rationale:
+
+1. **The CLI validates the API surface.** If `eastlight set 1 track1.pan 60` feels wrong, better to discover that now than after building widgets around it.
+2. **Round-trip fidelity must be proven first.** A GUI that silently corrupts data is worse than no GUI. (This is now verified — the writer produces byte-for-byte identical output against real device data.)
+3. **The remaining schema mapping will change the model.** The ~5% of unmapped sections (REC, PLAY, RHYTHM, ASSIGN, ROUTING, all FX type parameters) will add fields and potentially restructure things.
+4. **The three-panel layout is well-established.** Designing it once correctly after a stable API is better than redesigning incrementally.
+
+However, the core API must be designed **with the GUI in mind**. Three capabilities needed:
+
+1. **Change notification** — observer/signal pattern so the GUI reacts to model changes without polling
+2. **Undo/redo stack** — must live in the core library, not the GUI layer
+3. **Lazy loading** — don't parse all 99 memories on startup; load on demand with metadata caching
+
+### 8.9 Open Questions
+
+**Format (remaining ~5%):**
+- REC (6 fields), PLAY (8 fields), RHYTHM (13 fields) — need Parameter Guide cross-reference
+- MASTER (4 fields) — only 2 observed values, need full mapping
+- ASSIGN fields A-J — partially decoded, need Parameter Guide
+- ROUTING (19 fields) — values 0/63/127 observed, likely a send matrix
+- ICTL/ECTL — internal/external control section mappings
+- INPUT/OUTPUT/MIXER/EQ — field-level mapping
+- SYSTEM-specific: SETUP (22 fields), COLOR (5), USB (5), MIDI (10), PREF (20)
+- 66 IFX + 70 TFX type parameter sets — each effect type has its own fields (Parameter Guide pages 33-41)
+
+**Device behavior (need empirical testing):**
+- Does the device validate the count footer? (What if the value is wrong?)
+- What happens when TRACK metadata (V, X, S) doesn't match the actual WAV file?
+- Does the device check WAV file integrity beyond format headers?
+- How does the device handle a memory file with fewer/more sections than expected?
