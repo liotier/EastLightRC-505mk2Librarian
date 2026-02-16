@@ -1,0 +1,15 @@
+section: FIXED_VALUE
+instances: ["FIXED_VALUE"]
+fields:
+  A:
+    name: reserved_a
+    type: int
+    default: 0
+    display: "(reserved)"
+    read_only: true
+  B:
+    name: reserved_b
+    type: int
+    default: 1
+    display: "(reserved)"
+    read_only: true

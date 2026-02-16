@@ -1,8 +1,8 @@
-# Feasibility: Extending westlicht/rc505-editor for RC-505 mk2 Support
+# EastLight: Open-Source Editor/Librarian for the Roland RC-505 MK2
 
 ## Executive Summary
 
-Extending the [westlicht/rc505-editor](https://github.com/westlicht/rc505-editor) to support the RC-505 mk2 is **technically feasible but requires a complete data model rewrite**. Analysis of a full mk2 device dump (all 99 memory files, system settings, rhythm data, and WAV samples) reveals that Roland adopted a radically different XML format: **all property names are replaced with single-letter positional tags** (`<A>`, `<B>`, `<C>`, ...), the effects are stored in separate top-level elements (`<ifx>`, `<tfx>`), and each memory slot is an individual file (not one monolithic file). The format is now **fully decoded** — track parameters, FX architecture, WAV format, tempo/sample relationships, file naming conventions, and system structure are all understood. The best path forward is to fork the editor, reuse its JUCE UI shell and generic property system, and build the mk2 data model from scratch using data-driven mapping tables.
+The Roland RC-505 MK2 loop station uses a radically different file format from the original RC-505: **all property names are replaced with single-letter positional tags** (`<A>`, `<B>`, `<C>`, ...), effects are stored in separate top-level elements (`<ifx>`, `<tfx>`), and each memory slot is an individual file (not one monolithic file). Analysis of a full device dump (all 99 memory files, system settings, rhythm data, and WAV samples) has **fully decoded** the format — track parameters, FX architecture, WAV format, tempo/sample relationships, file naming conventions, and system structure are all understood. EastLight is a fresh Python implementation with a schema-driven architecture: YAML mapping tables define the positional tag → parameter name correspondence, and a generic parser handles all the rest. The core library sits beneath both a CLI (for scripting and power users) and a PyQt6 GUI (for the musician target audience).
 
 ---
 
@@ -310,22 +310,17 @@ No padding or alignment tricks observed — standard RIFF/WAVE with the 48-byte 
 
 ---
 
-## 3. What Can Be Reused
+## 3. Prior Art and Conceptual Inspiration
 
-| Component | Reusability | Notes |
-|-----------|-------------|-------|
-| **JUCE application shell** | High | Main window, menu system, multi-document panel |
-| **Property system base classes** | High | `Property`, `Group`, `BoolProperty`, `IntProperty`, `EnumProperty` — type system and observer pattern are generic |
-| **PropertyTreeView / PropertyView** | High | Generic hierarchical property editor |
-| **WaveformView** | High | Waveform display and drag-and-drop |
-| **PatchTreeView** | High | 99-patch browser with reordering |
-| **AudioEngine / LooperEngine** | Medium | Needs 32-bit float support and new tempo model |
-| **CustomLookAndFeel** | High | Pure cosmetic, fully reusable |
-| **XML I/O scaffolding** | Low | The `<mem>` / `<ifx>` / `<tfx>` split and positional tags require a new parser; invalid XML tags (`<0>`, `<#>`) require regex-based approach |
-| **RC505.h data model** | **None** | Every property definition must be rebuilt from scratch |
-| **RC505.cpp type defs** | **None** | All enum arrays, value ranges, type converters need replacing |
+EastLight is a fresh Python implementation, not a fork. The existing editors inform the design but no code is reused:
 
-Rough estimate: **~30% of the codebase is reusable** (UI shell, property system, audio). The remaining **~70%** requires a rewrite or new implementation (data model, FX architecture, XML parser, mixer/routing/EQ subsystems that didn't exist before).
+| Prior Work | What We Learn From It |
+|------------|----------------------|
+| **westlicht/rc505-editor** (C++/JUCE, GPLv3) | UI concepts: hierarchical property editor, patch browser tree, waveform display, drag-and-drop reordering. Demonstrates what musicians expect from this class of tool. |
+| **dfleury2/boss-rc500-editor** (C++/Qt, MIT) | Data architecture: JSON intermediate representation, template-based serialization. Validates the "mapping table" approach over hardcoded property classes. |
+| **rc600editor.com** (commercial, closed) | Market validation: users will pay $15 for this functionality. Confirms the RC-505 MK2 community needs an editor. Also confirms that positional mappings differ between RC-505 MK2 and RC-600. |
+
+No code from these projects is directly usable for the MK2: the data model is entirely different (positional tags, split `<mem>`/`<ifx>`/`<tfx>`, per-file memories), the language is different (Python, not C++), and the invalid XML tags (`<0>`, `<#>`) require a regex-based parser that none of them implement.
 
 ---
 
@@ -371,36 +366,17 @@ The [RC-505mkII Parameter Guide](https://files.kraftmusic.com/media/ownersmanual
 
 ---
 
-## 5. Approach Recommendation
+## 5. Implementation Approach
 
-### The Hybrid Path: westlicht UI + RC-500 data architecture + mk2 format
+### Fresh Python + PyQt6 Implementation
 
-Neither existing editor is directly extendable to the mk2:
-- **westlicht/rc505-editor**: Strong UI (JUCE), but its hardcoded C++ property model cannot handle the mk2's positional tags or split `<mem>`/`<ifx>`/`<tfx>` structure.
-- **dfleury2/boss-rc500-editor**: Better data architecture (JSON intermediate, Inja templates), but uses Qt (not JUCE) and targets a 2-track device.
+A fresh implementation is the right approach. Forking a C++/JUCE editor and retrofitting a completely different data model would be more work than starting clean with the right architecture:
 
-The recommended approach:
-
-1. **Fork westlicht/rc505-editor** for the JUCE UI shell, property system, audio engine, and look-and-feel.
-2. **Adopt the RC-500 editor's data architecture pattern**: Parse XML into a JSON intermediate representation using positional mapping tables, then use templates for serialization back to XML. This is far more maintainable than hardcoding 25,000+ lines of property definitions in C++.
-3. **Build the mk2 data model as mapping tables** rather than C++ class hierarchies:
-   - A JSON/YAML schema file defining each section's tag-to-parameter mapping, value ranges, and display types
-   - A generic parser that reads the schema and the RC0 file, producing an in-memory property tree
-   - Template-based serialization for writing back
-4. **Handle Roland's non-standard XML**: Use regex-based parsing (not standard XML parsers) to handle `<0>`, `<1>`, `<#>` tags in STEP_SLICER and other sections.
-5. **32-bit float WAV support**: Replace the original editor's 16-bit PCM WAV I/O with IEEE Float read/write.
-6. **Multi-file architecture**: Handle 198 individual memory files instead of one monolithic file. Support A/B file pairs (only modify A files; optionally sync B).
-
-### Phased Implementation
-
-| Phase | Scope | Status |
-|-------|-------|--------|
-| **1: Format mapping** | Complete positional tag → parameter mapping for all sections | **~80% complete** (TRACK fully decoded, FX structure mapped, SYSTEM inventoried) |
-| **2: Core editor** | Read/write memory settings (no FX). Patch browser, name editor, track/master/rec/play/rhythm settings | Ready to begin |
-| **3: FX support** | Input FX and Track FX editing (66-70 types × 4 groups × 4 slots) | Blocked on FX type index mapping |
-| **4: Audio** | WAV import/export with 32-bit float format | **Format fully decoded** — straightforward implementation |
-| **5: System settings** | SYSTEM1.RC0 editing | **Structure decoded** |
-| **6: Advanced** | Mixer, routing, EQ, step sequencer editing, playback engine | Phases 2-5 |
+1. **Schema-driven data model**: YAML files define each section's tag → parameter mapping, value ranges, and display types. The parser is generic; adding support for new sections or fixing mappings means editing YAML, not code.
+2. **Regex-based RC0 parser**: Handles Roland's non-standard XML (tags like `<0>`, `<#>`) that break all standard XML parsers.
+3. **Multi-file architecture**: 198 individual memory files with A/B backup pairs, not one monolithic file.
+4. **Audio format conversion**: Import from WAV/FLAC/OGG/MP3, export defaults to native 32-bit float WAV (lossless roundtrips) with 24-bit and 16-bit PCM options for sharing. Internal device format is 32-bit IEEE Float, stereo, 44.1kHz.
+5. **Core library with no UI dependencies**: `eastlight.core` supports scripting, CLI, and GUI equally.
 
 ---
 
@@ -446,7 +422,7 @@ However, the format is now **well-understood and regular**: sections are cleanly
 | **pyyaml** | Schema definition files | YAML is human-readable for parameter mapping tables that contributors will edit |
 | **click** | CLI framework | Composable commands, good help generation, mature and well-documented |
 | **rich** | Terminal output | Tables, colored output, progress bars for CLI usability |
-| **PySide6** | GUI (future) | Official Qt binding (LGPL); QTreeView for patch browser, QPainter for waveforms, property editor widgets, drag-and-drop, cross-platform; proven in audio software |
+| **PyQt6** | GUI (future) | Mature Qt binding (GPL); QTreeView for patch browser, QPainter for waveforms, property editor widgets, drag-and-drop, cross-platform; proven in audio software. GPL-licensed — aligned with this project's copyleft stance |
 | **pytest** | Testing | Standard Python test framework |
 | **ruff** | Linting/formatting | Fast, replaces flake8+black+isort in one tool |
 
@@ -454,7 +430,7 @@ However, the format is now **well-understood and regular**: sections are cleanly
 - `wave` (stdlib): Cannot read 32-bit float WAV — only supports integer PCM
 - `scipy.io.wavfile`: 32-bit float works but SciPy is a heavy dependency for just audio I/O; no metadata-only reads
 - `pydub`: Known data corruption with 32-bit float files; relies on external ffmpeg
-- `PyQt6`: Functionally identical to PySide6 but GPL license adds unnecessary restrictions for downstream users
+- `PySide6`: Functionally identical to PyQt6 but LGPL-licensed; PyQt6's GPL aligns better with this project's copyleft stance
 - `Dear PyGui`: Non-native appearance; immediate-mode paradigm unsuitable for property-heavy desktop app
 - `Toga/BeeWare`: Not production-ready as of 2026 (tree/table widgets still incomplete)
 - `Electron/Tauri`: Excellent aesthetics but two-language stack (Python+JS) adds complexity without proportional benefit
@@ -500,7 +476,7 @@ eastlight/
 │       ├── cli/
 │       │   ├── __init__.py
 │       │   └── main.py            # click-based CLI entry point
-│       └── gui/                   # Future: PySide6 GUI
+│       └── gui/                   # Future: PyQt6 GUI
 │           └── __init__.py
 ├── tests/
 │   ├── conftest.py                # Shared fixtures
@@ -627,5 +603,114 @@ fields:
 | **2: CLI** | `eastlight list` (show memories), `eastlight show <N>` (display parameters), `eastlight set <N> track1.pan 60` (edit), `eastlight diff <A> <B>` (compare A/B files), `eastlight name <N> "New Name"`. | click, rich |
 | **3: WAV support** | `eastlight wav-info <N>` (display WAV metadata), `eastlight wav-export <N> <T>` (export track WAV), `eastlight wav-import <N> <T> <file>` (import WAV with format conversion). | soundfile, numpy |
 | **4: FX support** | Complete IFX/TFX schema from Parameter Guide. `eastlight fx-show <N>`, `eastlight fx-set <N>`. | — |
-| **5: GUI** | PySide6 application: patch browser tree, property editor, waveform display, drag-and-drop patch reordering. | PySide6 |
+| **5: GUI** | PyQt6 application: patch browser tree, property editor, waveform display, drag-and-drop patch reordering. | PyQt6 |
 | **6: Advanced** | System settings editor, mixer/routing/EQ, step sequencer visualization, audio preview/playback. | — |
+
+### 8.6 Audio Import/Export Strategy
+
+The RC-505 MK2 stores audio as **32-bit IEEE Float, stereo, 44.1kHz WAV**. This is lossless and preserves full device fidelity, but has compatibility issues with some software (Logic Pro cannot import 32-bit float natively; some Ableton configurations struggle; DJ software like Serato rejects it; most mobile apps can't play it).
+
+**Import** (user provides audio → EL converts to device format):
+- Accept WAV, FLAC, OGG natively via soundfile/libsndfile
+- Accept MP3 via optional ffmpeg backend (future)
+- Convert to 32-bit float, stereo, 44.1kHz (resample if needed, mix to stereo if mono, convert bit depth)
+- Update TRACK metadata (X=total_samples, V=samples_per_measure, S=loop_length, W=1, Y=1)
+
+**Export** (device audio → user's preferred format):
+- **Default: 32-bit float WAV (native)** — bit-for-bit lossless copy from device. Safe for roundtrips: export → edit in DAW → re-import loses nothing. Works in Reaper, Audacity, Pro Tools, FL Studio, and most modern DAWs.
+- **Optional: 24-bit PCM WAV** — for sharing or for DAWs that reject float WAV (Logic Pro, some Ableton configurations). Technically lossy (truncates mantissa beyond 24 bits), but inaudible for any real-world audio at or below 0 dBFS. **Not safe for lossless roundtrips** — a 32→24→32 cycle introduces quantization noise at ~-144 dBFS.
+- **Optional: 16-bit PCM WAV** — maximum compatibility with legacy hardware and smaller file sizes (half the size of 32-bit float). Applies dithering for the 32→16 bit conversion.
+- File size comparison for a 30-second stereo track at 44.1kHz: 32-bit float = 10.6 MB, 24-bit = 7.9 MB, 16-bit = 5.3 MB.
+
+### 8.7 Competitive Baseline: rc600editor.com
+
+The commercial rc600editor.com ($15) defines what RC-505 MK2 users expect from an editor. Its feature set is the minimum viable bar:
+
+- **Memory manager**: drag-and-drop reorder, right-click rename/reset, batch copy/paste settings across memories
+- **WAV manager**: import/export/preview audio, auto-convert to device format, tempo detection
+- **Setlist manager**: organize memories for gigs with drag-and-drop
+- **Rhythm editor**: create custom drum beats (avoids Boss's clunky converter)
+- **One-click backup/restore** with selective restore
+- **WAV Studio**: basic audio editing (chop, fade, normalize, join)
+
+Boss Tone Studio (official) is universally disliked — described as "clunky", "not reliable", "just a file transfer tool", "designed for programming wonks, not musicians". This gap is why users pay for rc600editor.com. EastLight must match or exceed the commercial feature set while being free and open-source.
+
+Features EastLight should add beyond the current plan:
+- **Automatic backup before writes** — safety net for every destructive operation
+- **Copy/paste between memories** — the #1 workflow pain on the device itself
+- **Batch operations** — apply settings to multiple memories at once
+- **Setlist/tag organization** — reorder and tag memories for gigs
+- **Memory search/filter** — by name, tempo, track content, FX type
+- **A/B diff view** — compare live state vs backup
+- **Template system** — save and apply favorite patch configurations
+- **Storage space display** — show remaining SD card capacity
+- **Device auto-detection** — find ROLAND/ when device is USB-connected
+
+### 8.8 GUI Deferral
+
+The GUI (Phase 5) is deliberately deferred until the core library API has stabilized. Rationale:
+
+1. **The CLI validates the API surface.** If `eastlight set 1 track1.pan 60` feels wrong, better to discover that now than after building widgets around it.
+2. **Round-trip fidelity must be proven first.** A GUI that silently corrupts data is worse than no GUI. (This is now verified — the writer produces byte-for-byte identical output against real device data.)
+3. **The remaining schema mapping will change the model.** The ~5% of unmapped sections (REC, PLAY, RHYTHM, ASSIGN, ROUTING, all FX type parameters) will add fields and potentially restructure things.
+4. **The three-panel layout is well-established.** Designing it once correctly after a stable API is better than redesigning incrementally.
+
+However, the core API must be designed **with the GUI in mind**. Three capabilities needed:
+
+1. **Change notification** — observer/signal pattern so the GUI reacts to model changes without polling
+2. **Undo/redo stack** — must live in the core library, not the GUI layer
+3. **Lazy loading** — don't parse all 99 memories on startup; load on demand with metadata caching
+
+### 8.9 Drag-and-Drop as Core Interaction Pattern
+
+Drag-and-drop is a first-class interaction pattern in EastLight, not limited to WAV import/export:
+
+- **WAV files**: Drag WAV/FLAC/MP3 onto a track slot to import; drag a track to the desktop to export.
+- **Parameters**: Drag a parameter value from one track/memory to another to copy that setting.
+- **Memories**: Drag a memory slot to reorder, swap, or copy between slots.
+- **FX chains**: Drag effect slots to reorder within a chain, or between IFX/TFX buses.
+- **Templates**: Drag a saved template onto a memory to apply it.
+
+This maps naturally to PyQt6's `QDrag`/`QMimeData` system. Custom MIME types (`application/x-eastlight-memory`, `application/x-eastlight-param`, etc.) enable type-safe drag operations with visual feedback showing what will happen on drop.
+
+### 8.10 Schema Coverage
+
+As of the current iteration, YAML schemas cover all primary memory-level sections:
+
+| Schema | Instances | Fields | Confidence |
+|--------|-----------|--------|------------|
+| track.yaml | TRACK1-6 | 25 (A-Y) | High — verified against Parameter Guide |
+| name.yaml | NAME | 12 (A-L) | High — ASCII character codes |
+| master.yaml | MASTER | 4 (A-D) | High for A-B (tempo, samples), medium for C-D |
+| rec.yaml | REC | 6 (A-F) | High — Parameter Guide order matches |
+| play.yaml | PLAY | 8 (A-H) | Medium — D/E values need empirical verification |
+| rhythm.yaml | RHYTHM | 13 (A-M) | Medium — pattern/variation confident, beat/fill less so |
+| assign.yaml | ASSIGN1-16 | 10 (A-J) | High for A-H, medium for I-J |
+| input.yaml | INPUT | 13 (A-M) | Medium — gain fields (J-M) confident, others less so |
+| output.yaml | OUTPUT | 4 (A-D) | High — clean mapping to guide |
+| routing.yaml | ROUTING | 19 (A-S) | Medium — bitmask interpretation plausible |
+| mixer.yaml | MIXER | 22 (A-V) | Medium — level fields confident, pan fields speculative |
+| eq.yaml | EQ_MIC1..EQ_SUBOUT2R (12) | 12 (A-L) | High — clean mapping to 4-band parametric EQ |
+| master_fx.yaml | MASTER_FX | 3 (A-C) | Medium — comp/reverb confident |
+| fx_setup.yaml | SETUP (in ifx/tfx) | 1 (A) | Low — single field, purpose unclear |
+| fx_slot.yaml | A-D (in ifx/tfx) | 3 (A-C) | Medium — sw/mode/type reasonable |
+| fixed_value.yaml | FIXED_VALUE | 2 (A-B) | Low — always 0/1, purpose unknown |
+
+**Remaining to map:**
+- ICTL/ECTL controller sections (3-4 fields each, large function enums from Parameter Guide pages 14-21)
+- SYSTEM-specific: SETUP (22 fields), COLOR (5), USB (5), MIDI (10 — note: skips field B), PREF (14)
+- 66 IFX + 70 TFX effect type parameter sets (Parameter Guide pages 33-41)
+
+### 8.11 Open Questions
+
+**Format (remaining ~5%):**
+- 66 IFX + 70 TFX type parameter sets — each effect type has its own fields (Parameter Guide pages 33-41)
+- ICTL/ECTL — internal/external control section mappings (large function enums)
+- SYSTEM-specific sections: SETUP, COLOR, USB, MIDI (note: skips field B), PREF
+- MIDI section uses non-contiguous field tags (A, C, D, ... skipping B) — parser handles this correctly but schemas must not assume sequential tags
+
+**Device behavior (need empirical testing):**
+- Does the device validate the count footer? (What if the value is wrong?)
+- What happens when TRACK metadata (V, X, S) doesn't match the actual WAV file?
+- Does the device check WAV file integrity beyond format headers?
+- How does the device handle a memory file with fewer/more sections than expected?

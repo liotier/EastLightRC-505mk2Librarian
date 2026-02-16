@@ -1,0 +1,51 @@
+section: PLAY
+instances: ["PLAY"]
+fields:
+  A:
+    name: single_play_change
+    type: enum
+    default: 0
+    display: "Single Play Change"
+    choices:
+      0: "IMMEDIATE"
+      1: "LOOP END"
+  B:
+    name: fade_time_in
+    type: int
+    range: [0, 19]
+    default: 5
+    display: "Fade Time In"
+  C:
+    name: fade_time_out
+    type: int
+    range: [0, 19]
+    default: 5
+    display: "Fade Time Out"
+  D:
+    name: all_start
+    type: int
+    range: [0, 63]
+    default: 63
+    display: "All Start"
+  E:
+    name: track_chain
+    type: int
+    range: [0, 99]
+    default: 63
+    display: "Track Chain"
+  F:
+    name: current_track
+    type: int
+    range: [0, 5]
+    default: 4
+    display: "Current Track"
+  G:
+    name: loop_fx
+    type: bool
+    default: 0
+    display: "Loop FX"
+  H:
+    name: tempo
+    type: bool
+    default: 1
+    display: "Tempo"

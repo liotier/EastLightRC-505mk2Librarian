@@ -1,0 +1,21 @@
+section: MASTER_FX
+instances: ["MASTER_FX"]
+fields:
+  A:
+    name: comp
+    type: int
+    range: [0, 40]
+    default: 0
+    display: "Comp"
+  B:
+    name: reverb
+    type: int
+    range: [0, 40]
+    default: 0
+    display: "Reverb"
+  C:
+    name: reserved_c
+    type: int
+    default: 0
+    display: "(reserved)"
+    read_only: true

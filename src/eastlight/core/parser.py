@@ -18,8 +18,11 @@ _TOP_LEVEL_RE = re.compile(
 )
 
 # Match sections within a top-level element: <TRACK1>...</TRACK1>, <AA_LPF>...</AA_LPF>
+# The closing tag must be preceded by \n to distinguish section closing tags
+# (on their own line) from field closing tags (on the same line as the value).
+# This is critical for FX group sections like <A>...</A> which contain field <A>N</A>.
 _SECTION_RE = re.compile(
-    r"<([A-Z][A-Z0-9_]*)>\n(.*?)</\1>",
+    r"<([A-Z][A-Z0-9_]*)>\n(.*?)\n</\1>",
     re.DOTALL,
 )
 

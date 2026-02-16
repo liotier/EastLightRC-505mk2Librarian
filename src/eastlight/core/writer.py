@@ -11,18 +11,18 @@ from pathlib import Path
 from .parser import RC0File, RC0Section, RC0TopLevel
 
 
-def _write_fields(section: RC0Section, indent: str = "") -> str:
-    """Serialize a section's fields to RC0 format."""
+def _write_fields(section: RC0Section) -> str:
+    """Serialize a section's fields to RC0 format (tab-indented)."""
     lines = []
     for tag, value in section.fields.items():
-        lines.append(f"{indent}<{tag}>{value}</{tag}>")
+        lines.append(f"\t<{tag}>{value}</{tag}>")
     return "\n".join(lines)
 
 
-def _write_section(section: RC0Section, indent: str = "") -> str:
-    """Serialize a complete section (name + fields)."""
-    fields_str = _write_fields(section, indent + "")
-    return f"{indent}<{section.name}>\n{fields_str}\n{indent}</{section.name}>"
+def _write_section(section: RC0Section) -> str:
+    """Serialize a complete section (name + tab-indented fields)."""
+    fields_str = _write_fields(section)
+    return f"<{section.name}>\n{fields_str}\n</{section.name}>"
 
 
 def _write_top_level(element: RC0TopLevel) -> str:
@@ -60,9 +60,8 @@ def write_rc0(rc0: RC0File, path: str | Path | None = None) -> str:
 
     lines.append("</database>")
     lines.append(f"<count>{rc0.count:04d}</count>")
-    lines.append("")  # trailing newline
 
-    content = "\n".join(lines)
+    content = "\n".join(lines)  # no trailing newline — matches device format
 
     if path is not None:
         path = Path(path)

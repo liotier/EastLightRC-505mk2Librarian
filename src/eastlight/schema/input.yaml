@@ -1,0 +1,79 @@
+section: INPUT
+instances: ["INPUT"]
+fields:
+  A:
+    name: phantom_mic1
+    type: bool
+    default: 0
+    display: "Phantom 48V Mic 1"
+  B:
+    name: phantom_mic2
+    type: bool
+    default: 0
+    display: "Phantom 48V Mic 2"
+  C:
+    name: ns_mic1
+    type: bool
+    default: 0
+    display: "NS Mic 1"
+  D:
+    name: ns_mic2
+    type: bool
+    default: 0
+    display: "NS Mic 2"
+  E:
+    name: ns_inst1
+    type: bool
+    default: 0
+    display: "NS Inst 1"
+  F:
+    name: ns_inst2
+    type: bool
+    default: 0
+    display: "NS Inst 2"
+  G:
+    name: dynamics_mic
+    type: int
+    range: [0, 40]
+    default: 1
+    display: "Dynamics Mic"
+  H:
+    name: dynamics_inst
+    type: int
+    range: [0, 40]
+    default: 0
+    display: "Dynamics Inst"
+  I:
+    name: reserved_i
+    type: int
+    default: 0
+    display: "(reserved)"
+    read_only: true
+  J:
+    name: gain_mic1
+    type: int
+    range: [0, 100]
+    default: 40
+    display: "Gain Mic 1"
+    unit: "dB"
+  K:
+    name: gain_mic2
+    type: int
+    range: [0, 100]
+    default: 40
+    display: "Gain Mic 2"
+    unit: "dB"
+  L:
+    name: gain_inst1
+    type: int
+    range: [0, 100]
+    default: 40
+    display: "Gain Inst 1"
+    unit: "dB"
+  M:
+    name: gain_inst2
+    type: int
+    range: [0, 100]
+    default: 40
+    display: "Gain Inst 2"
+    unit: "dB"

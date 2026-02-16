@@ -1,0 +1,79 @@
+section: EQ
+instances: ["EQ_MIC1", "EQ_MIC2", "EQ_INST1L", "EQ_INST1R", "EQ_INST2L", "EQ_INST2R", "EQ_MAINOUTL", "EQ_MAINOUTR", "EQ_SUBOUT1L", "EQ_SUBOUT1R", "EQ_SUBOUT2L", "EQ_SUBOUT2R"]
+fields:
+  A:
+    name: sw
+    type: bool
+    default: 0
+    display: "Switch"
+  B:
+    name: lo_gain
+    type: int
+    range: [0, 40]
+    default: 20
+    display: "Low Gain"
+    unit: "dB (offset 20)"
+  C:
+    name: hi_gain
+    type: int
+    range: [0, 40]
+    default: 20
+    display: "High Gain"
+    unit: "dB (offset 20)"
+  D:
+    name: lo_mid_freq
+    type: int
+    range: [0, 27]
+    default: 11
+    display: "Lo Mid Freq"
+  E:
+    name: lo_mid_q
+    type: int
+    range: [0, 5]
+    default: 0
+    display: "Lo Mid Q"
+  F:
+    name: lo_mid_gain
+    type: int
+    range: [0, 40]
+    default: 20
+    display: "Lo Mid Gain"
+    unit: "dB (offset 20)"
+  G:
+    name: hi_mid_freq
+    type: int
+    range: [0, 27]
+    default: 16
+    display: "Hi Mid Freq"
+  H:
+    name: hi_mid_q
+    type: int
+    range: [0, 5]
+    default: 0
+    display: "Hi Mid Q"
+  I:
+    name: hi_mid_gain
+    type: int
+    range: [0, 40]
+    default: 20
+    display: "Hi Mid Gain"
+    unit: "dB (offset 20)"
+  J:
+    name: level
+    type: int
+    range: [0, 40]
+    default: 20
+    display: "Level"
+    unit: "dB (offset 20)"
+  K:
+    name: lo_cut
+    type: int
+    range: [0, 17]
+    default: 0
+    display: "Lo Cut"
+  L:
+    name: hi_cut
+    type: int
+    range: [0, 14]
+    default: 14
+    display: "Hi Cut"

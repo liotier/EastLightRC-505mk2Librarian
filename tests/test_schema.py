@@ -55,3 +55,51 @@ class TestSchemaRegistry:
         # Should have at least TRACK and NAME schemas
         assert registry.get("TRACK") is not None
         assert registry.get("NAME") is not None
+
+    def test_load_all_schemas_valid(self) -> None:
+        """Every YAML schema file must load without errors."""
+        schema_dir = Path(__file__).parent.parent / "src" / "eastlight" / "schema"
+        registry = SchemaRegistry()
+        registry.load_all(schema_dir)
+        # Verify all expected section types loaded
+        expected_types = [
+            "TRACK", "NAME", "MASTER", "REC", "PLAY", "RHYTHM",
+            "ASSIGN", "INPUT", "OUTPUT", "ROUTING", "MIXER", "EQ",
+            "MASTER_FX", "FX_SETUP", "FX_SLOT", "FIXED_VALUE",
+        ]
+        for section_type in expected_types:
+            assert registry.get(section_type) is not None, (
+                f"Schema for {section_type} not loaded"
+            )
+
+    def test_instance_resolution(self) -> None:
+        """Instance names must resolve to their parent schema."""
+        schema_dir = Path(__file__).parent.parent / "src" / "eastlight" / "schema"
+        registry = SchemaRegistry()
+        registry.load_all(schema_dir)
+        # Track instances
+        for i in range(1, 7):
+            assert registry.get(f"TRACK{i}") is not None
+        # Assign instances
+        for i in range(1, 17):
+            assert registry.get(f"ASSIGN{i}") is not None
+        # EQ instances
+        for name in ["EQ_MIC1", "EQ_MIC2", "EQ_INST1L", "EQ_MAINOUTL", "EQ_SUBOUT2R"]:
+            assert registry.get(name) is not None
+
+    def test_schema_field_counts(self) -> None:
+        """Each schema must have the expected number of fields."""
+        schema_dir = Path(__file__).parent.parent / "src" / "eastlight" / "schema"
+        registry = SchemaRegistry()
+        registry.load_all(schema_dir)
+        expected = {
+            "TRACK": 25, "NAME": 12, "MASTER": 4, "REC": 6,
+            "PLAY": 8, "RHYTHM": 13, "ASSIGN": 10, "INPUT": 13,
+            "OUTPUT": 4, "ROUTING": 19, "MIXER": 22, "EQ": 12,
+            "MASTER_FX": 3, "FX_SETUP": 1, "FX_SLOT": 3, "FIXED_VALUE": 2,
+        }
+        for section_type, count in expected.items():
+            schema = registry.get(section_type)
+            assert len(schema.fields) == count, (
+                f"{section_type}: expected {count} fields, got {len(schema.fields)}"
+            )
