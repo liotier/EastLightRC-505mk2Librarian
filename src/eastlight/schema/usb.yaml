@@ -1,0 +1,37 @@
+section: USB
+instances: ["USB"]
+fields:
+  A:
+    name: usb_audio
+    type: bool
+    default: 0
+    display: "USB Audio"
+  B:
+    name: usb_audio_mode
+    type: enum
+    default: 0
+    display: "USB Audio Mode"
+    choices:
+      0: "LOOP BACK"
+      1: "DIRECT"
+  C:
+    name: usb_audio_input
+    type: enum
+    default: 2
+    display: "USB Audio Input"
+    choices:
+      0: "MIC"
+      1: "INST"
+      2: "MIX"
+  D:
+    name: usb_audio_input_level
+    type: int
+    range: [0, 200]
+    default: 100
+    display: "USB Audio Input Level"
+  E:
+    name: usb_audio_output_level
+    type: int
+    range: [0, 200]
+    default: 100
+    display: "USB Audio Output Level"

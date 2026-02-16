@@ -1,0 +1,72 @@
+section: ICTL
+instances:
+  # Panel buttons: ICTL1/2 × TRACK1-5 × FX/TRACK
+  - "ICTL1_TRACK1_FX"
+  - "ICTL1_TRACK1_TRACK"
+  - "ICTL1_TRACK2_FX"
+  - "ICTL1_TRACK2_TRACK"
+  - "ICTL1_TRACK3_FX"
+  - "ICTL1_TRACK3_TRACK"
+  - "ICTL1_TRACK4_FX"
+  - "ICTL1_TRACK4_TRACK"
+  - "ICTL1_TRACK5_FX"
+  - "ICTL1_TRACK5_TRACK"
+  - "ICTL2_TRACK1_FX"
+  - "ICTL2_TRACK1_TRACK"
+  - "ICTL2_TRACK2_FX"
+  - "ICTL2_TRACK2_TRACK"
+  - "ICTL2_TRACK3_FX"
+  - "ICTL2_TRACK3_TRACK"
+  - "ICTL2_TRACK4_FX"
+  - "ICTL2_TRACK4_TRACK"
+  - "ICTL2_TRACK5_FX"
+  - "ICTL2_TRACK5_TRACK"
+  # Pedal banks: ICTL1/2/3 × PEDAL1-9
+  - "ICTL1_PEDAL1"
+  - "ICTL1_PEDAL2"
+  - "ICTL1_PEDAL3"
+  - "ICTL1_PEDAL4"
+  - "ICTL1_PEDAL5"
+  - "ICTL1_PEDAL6"
+  - "ICTL1_PEDAL7"
+  - "ICTL1_PEDAL8"
+  - "ICTL1_PEDAL9"
+  - "ICTL2_PEDAL1"
+  - "ICTL2_PEDAL2"
+  - "ICTL2_PEDAL3"
+  - "ICTL2_PEDAL4"
+  - "ICTL2_PEDAL5"
+  - "ICTL2_PEDAL6"
+  - "ICTL2_PEDAL7"
+  - "ICTL2_PEDAL8"
+  - "ICTL2_PEDAL9"
+  - "ICTL3_PEDAL1"
+  - "ICTL3_PEDAL2"
+  - "ICTL3_PEDAL3"
+  - "ICTL3_PEDAL4"
+  - "ICTL3_PEDAL5"
+  - "ICTL3_PEDAL6"
+  - "ICTL3_PEDAL7"
+  - "ICTL3_PEDAL8"
+  - "ICTL3_PEDAL9"
+fields:
+  A:
+    name: ctl_func
+    type: int
+    range: [0, 300]
+    default: 0
+    display: "CTL Function"
+  B:
+    name: ctl_func_long
+    type: int
+    range: [0, 300]
+    default: 0
+    display: "Long Press Function"
+  C:
+    name: ctl_mode
+    type: enum
+    default: 1
+    display: "Mode"
+    choices:
+      0: "MOMENT"
+      1: "TOGGLE"

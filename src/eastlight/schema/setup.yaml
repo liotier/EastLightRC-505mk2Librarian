@@ -1,0 +1,134 @@
+section: SETUP
+instances: ["SETUP"]
+fields:
+  A:
+    name: current_memory
+    type: int
+    range: [0, 98]
+    default: 0
+    display: "Current Memory"
+  B:
+    name: display_mode
+    type: enum
+    default: 0
+    display: "Display Mode"
+    choices:
+      0: "COLOR"
+      1: "MONO"
+      2: "SIMPLIFIED"
+  C:
+    name: memory_extent_max
+    type: int
+    range: [0, 98]
+    default: 98
+    display: "Memory Extent Max"
+  D:
+    name: contrast
+    type: int
+    range: [1, 10]
+    default: 6
+    display: "Contrast"
+  E:
+    name: auto_off
+    type: enum
+    default: 0
+    display: "Auto Off"
+    choices:
+      0: "OFF"
+      1: "10 MIN"
+      2: "30 MIN"
+      3: "240 MIN"
+  F:
+    name: indicator
+    type: enum
+    default: 2
+    display: "Indicator"
+    choices:
+      0: "TYPE1"
+      1: "TYPE2"
+      2: "OFF"
+  G:
+    name: fx_knob_mode
+    type: enum
+    default: 0
+    display: "FX Knob Mode"
+    choices:
+      0: "DIRECT"
+      1: "TOGGLE"
+  H:
+    name: knob_func
+    type: int
+    range: [0, 50]
+    default: 2
+    display: "Knob Function"
+  I:
+    name: memory_extent_min
+    type: int
+    range: [0, 98]
+    default: 0
+    display: "Memory Extent Min"
+  J:
+    name: unknown_j
+    type: int
+    default: 1
+    display: "(unknown J)"
+  K:
+    name: unknown_k
+    type: int
+    default: 0
+    display: "(unknown K)"
+  L:
+    name: unknown_l
+    type: int
+    default: 0
+    display: "(unknown L)"
+  M:
+    name: unknown_m
+    type: int
+    default: 0
+    display: "(unknown M)"
+  N:
+    name: unknown_n
+    type: int
+    default: 0
+    display: "(unknown N)"
+  O:
+    name: unknown_o
+    type: int
+    default: 0
+    display: "(unknown O)"
+  P:
+    name: unknown_p
+    type: int
+    default: 0
+    display: "(unknown P)"
+  Q:
+    name: unknown_q
+    type: int
+    default: 0
+    display: "(unknown Q)"
+  R:
+    name: unknown_r
+    type: int
+    default: 0
+    display: "(unknown R)"
+  S:
+    name: unknown_s
+    type: int
+    default: 0
+    display: "(unknown S)"
+  T:
+    name: unknown_t
+    type: int
+    default: 0
+    display: "(unknown T)"
+  U:
+    name: unknown_u
+    type: int
+    default: 0
+    display: "(unknown U)"
+  V:
+    name: unknown_v
+    type: int
+    default: 0
+    display: "(unknown V)"

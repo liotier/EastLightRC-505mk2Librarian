@@ -1,0 +1,116 @@
+# Each field selects whether the setting is stored globally (SYSTEM) or per-memory (MEMORY)
+section: PREF
+instances: ["PREF"]
+fields:
+  A:
+    name: pref_main
+    type: enum
+    default: 1
+    display: "Main Output"
+    choices:
+      0: "SYSTEM"
+      1: "MEMORY"
+  B:
+    name: pref_sub1
+    type: enum
+    default: 1
+    display: "Sub 1 Output"
+    choices:
+      0: "SYSTEM"
+      1: "MEMORY"
+  C:
+    name: pref_sub2
+    type: enum
+    default: 1
+    display: "Sub 2 Output"
+    choices:
+      0: "SYSTEM"
+      1: "MEMORY"
+  D:
+    name: pref_phones
+    type: enum
+    default: 1
+    display: "Phones Output"
+    choices:
+      0: "SYSTEM"
+      1: "MEMORY"
+  E:
+    name: pref_rhythm
+    type: enum
+    default: 1
+    display: "Rhythm"
+    choices:
+      0: "SYSTEM"
+      1: "MEMORY"
+  F:
+    name: pref_mfx
+    type: enum
+    default: 1
+    display: "Master FX"
+    choices:
+      0: "SYSTEM"
+      1: "MEMORY"
+  G:
+    name: pref_input
+    type: enum
+    default: 1
+    display: "Input"
+    choices:
+      0: "SYSTEM"
+      1: "MEMORY"
+  H:
+    name: pref_output
+    type: enum
+    default: 1
+    display: "Output"
+    choices:
+      0: "SYSTEM"
+      1: "MEMORY"
+  I:
+    name: pref_routing
+    type: enum
+    default: 1
+    display: "Routing"
+    choices:
+      0: "SYSTEM"
+      1: "MEMORY"
+  J:
+    name: pref_mixer
+    type: enum
+    default: 1
+    display: "Mixer"
+    choices:
+      0: "SYSTEM"
+      1: "MEMORY"
+  K:
+    name: pref_eq
+    type: enum
+    default: 1
+    display: "EQ"
+    choices:
+      0: "SYSTEM"
+      1: "MEMORY"
+  L:
+    name: pref_ctl
+    type: enum
+    default: 1
+    display: "Controllers"
+    choices:
+      0: "SYSTEM"
+      1: "MEMORY"
+  M:
+    name: pref_assign
+    type: enum
+    default: 1
+    display: "Assign"
+    choices:
+      0: "SYSTEM"
+      1: "MEMORY"
+  N:
+    name: pref_track
+    type: enum
+    default: 1
+    display: "Track Settings"
+    choices:
+      0: "SYSTEM"
+      1: "MEMORY"

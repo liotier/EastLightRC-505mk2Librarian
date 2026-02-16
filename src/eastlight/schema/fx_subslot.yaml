@@ -1,0 +1,42 @@
+section: FX_SUBSLOT
+instances:
+  - "AA"
+  - "AB"
+  - "AC"
+  - "AD"
+  - "BA"
+  - "BB"
+  - "BC"
+  - "BD"
+  - "CA"
+  - "CB"
+  - "CC"
+  - "CD"
+  - "DA"
+  - "DB"
+  - "DC"
+  - "DD"
+fields:
+  A:
+    name: sw
+    type: bool
+    default: 0
+    display: "Switch"
+  B:
+    name: reserved_b
+    type: int
+    default: 0
+    display: "(reserved)"
+    read_only: true
+  C:
+    name: fx_type
+    type: int
+    range: [0, 70]
+    default: 0
+    display: "FX Type"
+  D:
+    name: reserved_d
+    type: int
+    default: 0
+    display: "(reserved)"
+    read_only: true

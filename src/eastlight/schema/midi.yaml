@@ -1,0 +1,67 @@
+# Note: MIDI section skips tag B (non-contiguous: A, C, D, E, F, G, H, I, J, K)
+section: MIDI
+instances: ["MIDI"]
+fields:
+  A:
+    name: rx_ch
+    type: int
+    range: [0, 15]
+    default: 9
+    display: "Receive Channel"
+  C:
+    name: tx_ch
+    type: int
+    range: [0, 15]
+    default: 14
+    display: "Transmit Channel"
+  D:
+    name: sync_mode
+    type: enum
+    default: 1
+    display: "Sync Mode"
+    choices:
+      0: "AUTO"
+      1: "INTERNAL"
+      2: "REMOTE"
+  E:
+    name: sync_source
+    type: enum
+    default: 0
+    display: "Sync Source"
+    choices:
+      0: "USB"
+      1: "MIDI"
+  F:
+    name: pc_rx
+    type: enum
+    default: 2
+    display: "Program Change RX"
+    choices:
+      0: "OFF"
+      1: "ON"
+      2: "MEMORY"
+  G:
+    name: omni
+    type: bool
+    default: 0
+    display: "Omni Mode"
+  H:
+    name: thru
+    type: bool
+    default: 1
+    display: "MIDI Thru"
+  I:
+    name: cc_out
+    type: bool
+    default: 1
+    display: "CC Out"
+  J:
+    name: pc_out
+    type: bool
+    default: 0
+    display: "PC Out"
+  K:
+    name: active_sensing
+    type: bool
+    default: 0
+    display: "Active Sensing"

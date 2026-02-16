@@ -1,0 +1,33 @@
+section: COLOR
+instances: ["COLOR"]
+fields:
+  A:
+    name: track1_color
+    type: int
+    range: [0, 27]
+    default: 0
+    display: "Track 1 Color"
+  B:
+    name: track2_color
+    type: int
+    range: [0, 27]
+    default: 0
+    display: "Track 2 Color"
+  C:
+    name: track3_color
+    type: int
+    range: [0, 27]
+    default: 1
+    display: "Track 3 Color"
+  D:
+    name: track4_color
+    type: int
+    range: [0, 27]
+    default: 3
+    display: "Track 4 Color"
+  E:
+    name: track5_color
+    type: int
+    range: [0, 27]
+    default: 2
+    display: "Track 5 Color"
