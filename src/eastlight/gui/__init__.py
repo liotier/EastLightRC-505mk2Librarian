@@ -1,1 +1,1 @@
-"""GUI interface for EastLight (PySide6). Future implementation."""
+"""GUI interface for EastLight (PyQt6). Future implementation."""

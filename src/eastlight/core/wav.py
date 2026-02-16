@@ -1,12 +1,34 @@
-"""WAV file handling for RC-505 MK2 32-bit IEEE Float audio files."""
+"""WAV file handling for RC-505 MK2 32-bit IEEE Float audio files.
+
+The RC-505 MK2 stores audio as 32-bit IEEE Float, stereo, 44.1kHz WAV.
+
+Import: accepts WAV/FLAC/OGG (anything soundfile/libsndfile supports),
+    converts to the device's required format.
+Export: default is 24-bit PCM WAV for universal compatibility; native
+    32-bit float and 16-bit PCM also available.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 
 import numpy as np
 import soundfile as sf
+
+# Device constants
+DEVICE_SAMPLE_RATE = 44100
+DEVICE_CHANNELS = 2
+DEVICE_SUBTYPE = "FLOAT"  # 32-bit IEEE float
+
+
+class ExportFormat(Enum):
+    """Audio export format options."""
+
+    PCM_24 = "PCM_24"  # 24-bit PCM WAV — universal compatibility (default)
+    FLOAT_32 = "FLOAT"  # 32-bit float WAV — native device format
+    PCM_16 = "PCM_16"  # 16-bit PCM WAV — maximum compatibility, smallest files
 
 
 @dataclass
@@ -61,19 +83,68 @@ def wav_read(path: str | Path) -> tuple[np.ndarray, int]:
     return data, sr
 
 
-def wav_write(
+def wav_write_device(
     path: str | Path,
     data: np.ndarray,
-    sample_rate: int = 44100,
+    sample_rate: int = DEVICE_SAMPLE_RATE,
 ) -> None:
-    """Write audio data to a 32-bit float WAV file.
+    """Write audio data in the RC-505 MK2's native format (32-bit float WAV).
+
+    Used when importing audio into the device's ROLAND/WAVE/ directory.
 
     Args:
         path: Output path.
         data: Audio data as float32 numpy array, shape (frames, channels).
         sample_rate: Sample rate (default 44100).
     """
-    sf.write(str(path), data, sample_rate, subtype="FLOAT")
+    sf.write(str(path), data, sample_rate, subtype=DEVICE_SUBTYPE)
+
+
+def wav_export(
+    path: str | Path,
+    data: np.ndarray,
+    sample_rate: int = DEVICE_SAMPLE_RATE,
+    fmt: ExportFormat = ExportFormat.PCM_24,
+) -> None:
+    """Export audio data to WAV in the user's chosen format.
+
+    Default is 24-bit PCM for universal compatibility (all DAWs including
+    Logic Pro, all media players, all hardware). No quality loss for audio
+    at or below 0 dBFS.
+
+    Args:
+        path: Output path.
+        data: Audio data as numpy array.
+        sample_rate: Sample rate.
+        fmt: Export format (default: 24-bit PCM).
+    """
+    sf.write(str(path), data, sample_rate, subtype=fmt.value)
+
+
+def import_audio(path: str | Path) -> tuple[np.ndarray, int]:
+    """Import audio from any soundfile-supported format and prepare for device.
+
+    Reads WAV, FLAC, OGG (and other libsndfile-supported formats),
+    converts to float32, and ensures stereo. Does NOT resample — caller
+    should check sample rate and resample if needed.
+
+    Args:
+        path: Path to the source audio file.
+
+    Returns:
+        Tuple of (data, sample_rate). Data is float32, shape (frames, 2).
+    """
+    data, sr = sf.read(str(path), dtype="float32")
+
+    # Ensure stereo
+    if data.ndim == 1:
+        # Mono → duplicate to stereo
+        data = np.column_stack([data, data])
+    elif data.shape[1] > 2:
+        # Multi-channel → take first two
+        data = data[:, :2]
+
+    return data, sr
 
 
 def wav_overview(path: str | Path, num_points: int = 1000) -> np.ndarray:
