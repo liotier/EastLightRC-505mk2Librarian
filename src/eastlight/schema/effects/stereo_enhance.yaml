@@ -1,0 +1,17 @@
+section: STEREO_ENHANCE
+fields:
+  A:
+    name: width
+    type: int
+    default: 0
+    display: "Width"
+  B:
+    name: type
+    type: int
+    default: 29
+    display: "Type"
+  C:
+    name: d_level
+    type: int
+    default: 50
+    display: "D.Level"

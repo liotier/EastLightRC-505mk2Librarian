@@ -1,0 +1,47 @@
+section: EQ
+fields:
+  A:
+    name: low_gain
+    type: int
+    default: 20
+    display: "Low Gain"
+  B:
+    name: low_mid_freq
+    type: int
+    default: 20
+    display: "Low Mid Freq"
+  C:
+    name: low_mid_q
+    type: int
+    default: 20
+    display: "Low Mid Q"
+  D:
+    name: low_mid_gain
+    type: int
+    default: 20
+    display: "Low Mid Gain"
+  E:
+    name: hi_mid_freq
+    type: int
+    default: 20
+    display: "Hi Mid Freq"
+  F:
+    name: hi_mid_q
+    type: int
+    default: 16
+    display: "Hi Mid Q"
+  G:
+    name: hi_mid_gain
+    type: int
+    default: 1
+    display: "Hi Mid Gain"
+  H:
+    name: high_gain
+    type: int
+    default: 22
+    display: "High Gain"
+  I:
+    name: level
+    type: int
+    default: 1
+    display: "Level"

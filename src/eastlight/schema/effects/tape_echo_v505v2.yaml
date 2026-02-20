@@ -1,0 +1,32 @@
+section: TAPE_ECHO_V505V2
+fields:
+  A:
+    name: head_1
+    type: int
+    default: 50
+    display: "Head 1"
+  B:
+    name: head_2
+    type: int
+    default: 50
+    display: "Head 2"
+  C:
+    name: head_3
+    type: int
+    default: 100
+    display: "Head 3"
+  D:
+    name: feedback
+    type: int
+    default: 50
+    display: "Feedback"
+  E:
+    name: tone
+    type: int
+    default: 50
+    display: "Tone"
+  F:
+    name: d_level
+    type: int
+    default: 50
+    display: "D.Level"

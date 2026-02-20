@@ -32,12 +32,12 @@ def _load_registry() -> SchemaRegistry:
     return registry
 
 
-def _open_memory(roland_dir: str, memory_num: int) -> tuple[RC505Library, Memory]:
-    """Parse a memory and return (library, memory) for reuse."""
+def _open_memory(roland_dir: str, memory_num: int) -> tuple[RC505Library, Memory, SchemaRegistry]:
+    """Parse a memory and return (library, memory, registry) for reuse."""
     lib = RC505Library(roland_dir)
     registry = _load_registry()
     rc0 = lib.parse_memory(memory_num)
-    return lib, Memory(rc0, registry)
+    return lib, Memory(rc0, registry), registry
 
 
 @click.group()
@@ -103,7 +103,7 @@ def list_cmd(roland_dir: str) -> None:
 @click.option("--raw", is_flag=True, help="Show raw tag names instead of resolved names")
 def show(roland_dir: str, memory_num: int, section: str | None, raw: bool) -> None:
     """Show parameters for a memory slot."""
-    _, mem = _open_memory(roland_dir, memory_num)
+    _, mem, _ = _open_memory(roland_dir, memory_num)
 
     console.print(f"[bold]Memory {memory_num:03d}[/bold]: {mem.name or '(unnamed)'}")
     console.print()
@@ -189,7 +189,7 @@ def set_cmd(
 
     Example: eastlight set ROLAND 1 MASTER tempo_x10 800
     """
-    lib, mem = _open_memory(roland_dir, memory_num)
+    lib, mem, _ = _open_memory(roland_dir, memory_num)
     resolved = mem.section(section_name)
     if resolved is None:
         raise click.ClickException(
@@ -227,7 +227,7 @@ def name(roland_dir: str, memory_num: int, new_name: str) -> None:
 
     Example: eastlight name ROLAND 1 "My Loop"
     """
-    lib, mem = _open_memory(roland_dir, memory_num)
+    lib, mem, _ = _open_memory(roland_dir, memory_num)
     old_name = mem.name
     mem.set_name(new_name)
     lib.save_memory(memory_num, mem.rc0)
@@ -558,6 +558,216 @@ def wav_import_cmd(
         f"[green]Imported[/green] {Path(input_file).name} → "
         f"memory {memory_num:03d} track {track_num} "
         f"({dur:.2f}s, {data.shape[0]} samples)"
+    )
+
+
+# --- FX commands ---
+
+
+_FX_CHAINS = {"ifx": "Input FX", "tfx": "Track FX"}
+_FX_GROUPS = ["A", "B", "C", "D"]
+_FX_SLOTS = ["A", "B", "C", "D"]
+
+
+@cli.command("fx-show")
+@click.argument("roland_dir", type=click.Path(exists=True, file_okay=False))
+@click.argument("memory_num", type=int)
+@click.argument("chain", type=click.Choice(["ifx", "tfx"]))
+@click.option("--group", "-g", type=click.Choice(_FX_GROUPS), help="Show only this group (A-D)")
+@click.option("--slot", "-s", help="Show only this subslot (e.g., AA, AB, CD)")
+@click.option("--raw", is_flag=True, help="Show raw tag names instead of resolved names")
+def fx_show(
+    roland_dir: str,
+    memory_num: int,
+    chain: str,
+    group: str | None,
+    slot: str | None,
+    raw: bool,
+) -> None:
+    """Show FX chain parameters for a memory.
+
+    CHAIN is 'ifx' (input FX) or 'tfx' (track FX).
+
+    Examples:
+
+    \b
+      eastlight fx-show ROLAND 1 ifx
+      eastlight fx-show ROLAND 1 tfx -g A
+      eastlight fx-show ROLAND 1 ifx -s AA
+    """
+    lib, mem, registry = _open_memory(roland_dir, memory_num)
+    rc0 = mem.rc0
+
+    fx_element = rc0.ifx if chain == "ifx" else rc0.tfx
+    if fx_element is None:
+        raise click.ClickException(f"No <{chain}> element in memory {memory_num:03d}.")
+
+    chain_label = _FX_CHAINS[chain]
+    console.print(
+        f"[bold]Memory {memory_num:03d}[/bold] — {chain_label}"
+    )
+    console.print()
+
+    fx_type_map = registry.fx_types.ifx_types if chain == "ifx" else registry.fx_types.tfx_types
+
+    # Determine which subslots to display
+    if slot:
+        subslots = [slot.upper()]
+    elif group:
+        subslots = [f"{group.upper()}{s}" for s in _FX_SLOTS]
+    else:
+        subslots = [f"{g}{s}" for g in _FX_GROUPS for s in _FX_SLOTS]
+
+    for ss in subslots:
+        # Show subslot header (switch + active FX type)
+        header_section = fx_element.sections.get(ss)
+        if header_section is None:
+            continue
+
+        sw = header_section.get("A", 0)
+        fx_type_idx = header_section.get("C", 0)
+        fx_name = fx_type_map.get(fx_type_idx, f"UNKNOWN({fx_type_idx})")
+        sw_str = "[green]ON[/green]" if sw else "[dim]OFF[/dim]"
+
+        console.print(
+            f"  [bold cyan]{ss}[/bold cyan]: {sw_str}  "
+            f"[yellow]{fx_name}[/yellow] (type {fx_type_idx})"
+        )
+
+        # Show the active effect's parameters
+        active_section_name = f"{ss}_{fx_name}"
+        section = fx_element.sections.get(active_section_name)
+        if section is None:
+            console.print(f"    [dim](no section '{active_section_name}')[/dim]")
+            console.print()
+            continue
+
+        schema = registry.get(active_section_name)
+
+        table = Table(show_header=True, padding=(0, 1))
+        table.add_column("Tag", style="dim", width=4)
+        table.add_column("Parameter", style="cyan", min_width=16)
+        table.add_column("Value", justify="right")
+
+        for tag, value in section.fields.items():
+            if raw or schema is None:
+                param_name = tag
+            else:
+                fd = schema.fields.get(tag)
+                param_name = (fd.display or fd.name) if fd else tag
+
+            table.add_row(tag, param_name, str(value))
+
+        console.print(table)
+        console.print()
+
+
+@cli.command("fx-set")
+@click.argument("roland_dir", type=click.Path(exists=True, file_okay=False))
+@click.argument("memory_num", type=int)
+@click.argument("chain", type=click.Choice(["ifx", "tfx"]))
+@click.argument("subslot")
+@click.argument("param_name")
+@click.argument("value", type=int)
+def fx_set(
+    roland_dir: str,
+    memory_num: int,
+    chain: str,
+    subslot: str,
+    param_name: str,
+    value: int,
+) -> None:
+    """Set an FX parameter value.
+
+    SUBSLOT identifies the FX slot (e.g., AA, AB, CD).
+    PARAM_NAME can be a schema name (e.g., 'feedback') or raw tag (e.g., 'B').
+
+    Special param names for the subslot header:
+      sw        — enable/disable the slot (0 or 1)
+      fx_type   — change the active effect type index
+
+    Examples:
+
+    \b
+      eastlight fx-set ROLAND 1 ifx AA feedback 30
+      eastlight fx-set ROLAND 1 tfx AA sw 1
+      eastlight fx-set ROLAND 1 ifx AA fx_type 35
+    """
+    lib, mem, registry = _open_memory(roland_dir, memory_num)
+    rc0 = mem.rc0
+
+    fx_element = rc0.ifx if chain == "ifx" else rc0.tfx
+    if fx_element is None:
+        raise click.ClickException(f"No <{chain}> element in memory {memory_num:03d}.")
+
+    subslot = subslot.upper()
+    fx_type_map = registry.fx_types.ifx_types if chain == "ifx" else registry.fx_types.tfx_types
+
+    # Check if setting a header field (sw, fx_type)
+    header_section = fx_element.sections.get(subslot)
+    if header_section is None:
+        raise click.ClickException(
+            f"Subslot '{subslot}' not found in {chain} of memory {memory_num:03d}."
+        )
+
+    header_schema = registry.get(subslot)
+
+    # Try header field first (sw, fx_type, etc.)
+    if header_schema:
+        header_tag = header_schema.name_to_tag(param_name)
+        if header_tag is not None:
+            old_value = header_section.get(header_tag)
+            header_section[header_tag] = value
+            lib.save_memory(memory_num, rc0)
+            display = param_name
+            if param_name == "fx_type":
+                old_name = fx_type_map.get(old_value, str(old_value))
+                new_name = fx_type_map.get(value, str(value))
+                display = f"fx_type ({old_name} → {new_name})"
+            console.print(
+                f"[green]Set[/green] {chain}.{subslot}.{display}: "
+                f"{old_value} → {value}"
+            )
+            return
+
+    # Otherwise, set a parameter on the active effect
+    fx_type_idx = header_section.get("C", 0)
+    fx_name = fx_type_map.get(fx_type_idx, f"UNKNOWN({fx_type_idx})")
+    effect_section_name = f"{subslot}_{fx_name}"
+    effect_section = fx_element.sections.get(effect_section_name)
+
+    if effect_section is None:
+        raise click.ClickException(
+            f"Effect section '{effect_section_name}' not found."
+        )
+
+    effect_schema = registry.get(effect_section_name)
+
+    # Try schema name first
+    tag = None
+    if effect_schema:
+        tag = effect_schema.name_to_tag(param_name)
+
+    if tag is None:
+        # Try raw tag
+        if param_name in effect_section.fields:
+            tag = param_name
+        else:
+            raise click.ClickException(
+                f"Parameter '{param_name}' not found in {effect_section_name}."
+            )
+
+    old_value = effect_section.get(tag)
+    effect_section[tag] = value
+    lib.save_memory(memory_num, rc0)
+
+    display_name = param_name
+    if effect_schema and tag != param_name:
+        display_name = f"{param_name} ({tag})"
+
+    console.print(
+        f"[green]Set[/green] {chain}.{subslot}.{fx_name}.{display_name}: "
+        f"{old_value} → {value}"
     )
 
 

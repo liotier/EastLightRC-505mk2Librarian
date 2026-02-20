@@ -1,0 +1,27 @@
+section: ELECTRIC
+fields:
+  A:
+    name: pitch
+    type: int
+    default: 12
+    display: "Pitch"
+  B:
+    name: formant
+    type: int
+    default: 50
+    display: "Formant"
+  C:
+    name: tone
+    type: int
+    default: 5
+    display: "Tone"
+  D:
+    name: e_level
+    type: int
+    default: 10
+    display: "E.Level"
+  E:
+    name: type
+    type: int
+    default: 0
+    display: "Type"

@@ -1,0 +1,32 @@
+section: ISOLATOR
+fields:
+  A:
+    name: band
+    type: int
+    default: 0
+    display: "Band"
+  B:
+    name: rate
+    type: int
+    default: 6
+    display: "Rate"
+  C:
+    name: e_level
+    type: int
+    default: 50
+    display: "E.Level"
+  D:
+    name: d_level
+    type: int
+    default: 100
+    display: "D.Level"
+  E:
+    name: low_cut
+    type: int
+    default: 0
+    display: "Low Cut"
+  F:
+    name: step_rate
+    type: int
+    default: 0
+    display: "Step Rate"

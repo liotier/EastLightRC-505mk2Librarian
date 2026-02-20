@@ -1,0 +1,7 @@
+section: WARP
+fields:
+  A:
+    name: d_level
+    type: int
+    default: 50
+    display: "D.Level"

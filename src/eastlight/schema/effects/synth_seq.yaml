@@ -1,0 +1,112 @@
+section: SYNTH_SEQ
+fields:
+  A:
+    name: sw
+    type: int
+    default: 0
+    display: "Sw"
+  B:
+    name: rate
+    type: int
+    default: 0
+    display: "Rate"
+  C:
+    name: d_level
+    type: int
+    default: 0
+    display: "D.Level"
+  D:
+    name: e_level
+    type: int
+    default: 0
+    display: "E.Level"
+  E:
+    name: step_rate
+    type: int
+    default: 6
+    display: "Step Rate"
+  F:
+    name: step_count
+    type: int
+    default: 15
+    display: "Step Count"
+  G:
+    name: step_1
+    type: int
+    default: 0
+    display: "Step 1"
+  H:
+    name: step_2
+    type: int
+    default: 0
+    display: "Step 2"
+  I:
+    name: step_3
+    type: int
+    default: 0
+    display: "Step 3"
+  J:
+    name: step_4
+    type: int
+    default: 0
+    display: "Step 4"
+  K:
+    name: step_5
+    type: int
+    default: 0
+    display: "Step 5"
+  L:
+    name: step_6
+    type: int
+    default: 0
+    display: "Step 6"
+  M:
+    name: step_7
+    type: int
+    default: 0
+    display: "Step 7"
+  N:
+    name: step_8
+    type: int
+    default: 0
+    display: "Step 8"
+  O:
+    name: step_9
+    type: int
+    default: 0
+    display: "Step 9"
+  P:
+    name: step_10
+    type: int
+    default: 0
+    display: "Step 10"
+  Q:
+    name: step_11
+    type: int
+    default: 0
+    display: "Step 11"
+  R:
+    name: step_12
+    type: int
+    default: 0
+    display: "Step 12"
+  S:
+    name: step_13
+    type: int
+    default: 0
+    display: "Step 13"
+  T:
+    name: step_14
+    type: int
+    default: 0
+    display: "Step 14"
+  U:
+    name: step_15
+    type: int
+    default: 0
+    display: "Step 15"
+  V:
+    name: step_16
+    type: int
+    default: 0
+    display: "Step 16"

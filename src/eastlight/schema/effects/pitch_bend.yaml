@@ -1,0 +1,17 @@
+section: PITCH_BEND
+fields:
+  A:
+    name: pitch
+    type: int
+    default: 6
+    display: "Pitch"
+  B:
+    name: rise_time
+    type: int
+    default: 50
+    display: "Rise Time"
+  C:
+    name: mode
+    type: int
+    default: 1
+    display: "Mode"

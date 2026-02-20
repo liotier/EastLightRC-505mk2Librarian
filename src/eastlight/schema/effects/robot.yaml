@@ -1,0 +1,17 @@
+section: ROBOT
+fields:
+  A:
+    name: note
+    type: int
+    default: 0
+    display: "Note"
+  B:
+    name: e_level
+    type: int
+    default: 50
+    display: "E.Level"
+  C:
+    name: gender
+    type: int
+    default: 1
+    display: "Gender"

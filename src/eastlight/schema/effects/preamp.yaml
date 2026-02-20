@@ -1,0 +1,62 @@
+section: PREAMP
+fields:
+  A:
+    name: type
+    type: int
+    default: 3
+    display: "Type"
+  B:
+    name: gain
+    type: int
+    default: 1
+    display: "Gain"
+  C:
+    name: bass
+    type: int
+    default: 50
+    display: "Bass"
+  D:
+    name: middle
+    type: int
+    default: 10
+    display: "Middle"
+  E:
+    name: treble
+    type: int
+    default: 50
+    display: "Treble"
+  F:
+    name: presence
+    type: int
+    default: 50
+    display: "Presence"
+  G:
+    name: bright
+    type: int
+    default: 50
+    display: "Bright"
+  H:
+    name: level
+    type: int
+    default: 50
+    display: "Level"
+  I:
+    name: sp_type
+    type: int
+    default: 0
+    display: "SP Type"
+  J:
+    name: mic_type
+    type: int
+    default: 0
+    display: "Mic Type"
+  K:
+    name: mic_dist
+    type: int
+    default: 0
+    display: "Mic Dist"
+  L:
+    name: d_level
+    type: int
+    default: 50
+    display: "D.Level"

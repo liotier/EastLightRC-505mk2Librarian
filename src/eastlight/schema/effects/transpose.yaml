@@ -1,0 +1,12 @@
+section: TRANSPOSE
+fields:
+  A:
+    name: pitch
+    type: int
+    default: 12
+    display: "Pitch"
+  B:
+    name: mode
+    type: int
+    default: 1
+    display: "Mode"

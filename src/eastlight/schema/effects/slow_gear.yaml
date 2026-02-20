@@ -1,0 +1,22 @@
+section: SLOW_GEAR
+fields:
+  A:
+    name: sens
+    type: int
+    default: 50
+    display: "Sens"
+  B:
+    name: rise_time
+    type: int
+    default: 50
+    display: "Rise Time"
+  C:
+    name: e_level
+    type: int
+    default: 50
+    display: "E.Level"
+  D:
+    name: mode
+    type: int
+    default: 1
+    display: "Mode"

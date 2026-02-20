@@ -1,0 +1,27 @@
+section: FREEZE
+fields:
+  A:
+    name: mode_1
+    type: int
+    default: 30
+    display: "Mode 1"
+  B:
+    name: mode_2
+    type: int
+    default: 30
+    display: "Mode 2"
+  C:
+    name: mode_3
+    type: int
+    default: 30
+    display: "Mode 3"
+  D:
+    name: mode_4
+    type: int
+    default: 30
+    display: "Mode 4"
+  E:
+    name: d_level
+    type: int
+    default: 50
+    display: "D.Level"

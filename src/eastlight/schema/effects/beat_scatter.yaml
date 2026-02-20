@@ -1,0 +1,12 @@
+section: BEAT_SCATTER
+fields:
+  A:
+    name: type
+    type: int
+    default: 0
+    display: "Type"
+  B:
+    name: length
+    type: int
+    default: 3
+    display: "Length"

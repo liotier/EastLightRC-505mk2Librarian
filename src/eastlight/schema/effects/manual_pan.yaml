@@ -1,0 +1,7 @@
+section: MANUAL_PAN
+fields:
+  A:
+    name: position
+    type: int
+    default: 50
+    display: "Position"

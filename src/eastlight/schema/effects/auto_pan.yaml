@@ -1,0 +1,27 @@
+section: AUTO_PAN
+fields:
+  A:
+    name: wave
+    type: int
+    default: 64
+    display: "Wave"
+  B:
+    name: depth
+    type: int
+    default: 0
+    display: "Depth"
+  C:
+    name: e_level
+    type: int
+    default: 50
+    display: "E.Level"
+  D:
+    name: rate
+    type: int
+    default: 0
+    display: "Rate"
+  E:
+    name: step_rate
+    type: int
+    default: 0
+    display: "Step Rate"
