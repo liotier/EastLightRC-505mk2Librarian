@@ -5,11 +5,14 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
+import numpy as np
 import pytest
+import soundfile as sf
 from click.testing import CliRunner
 
 from eastlight.cli.main import cli
 from eastlight.core.parser import parse_memory_file
+from eastlight.core.wav import DEVICE_SAMPLE_RATE, DEVICE_SUBTYPE
 from eastlight.core.writer import write_rc0
 
 
@@ -267,3 +270,253 @@ class TestDiffCommand:
         result = runner.invoke(cli, ["diff", str(roland_dir), "1", "2"])
         assert result.exit_code == 0
         # Should show difference in pan (tag C)
+
+
+# --- WAV command helpers ---
+
+
+def _make_device_wav(path: Path, frames: int = 44100) -> None:
+    """Write a valid 32-bit float stereo WAV at 44.1kHz."""
+    data = np.random.default_rng(42).uniform(-0.5, 0.5, (frames, 2)).astype(np.float32)
+    sf.write(str(path), data, DEVICE_SAMPLE_RATE, subtype=DEVICE_SUBTYPE)
+
+
+@pytest.fixture
+def roland_dir_wav(tmp_path: Path, sample_rc0_content: str) -> Path:
+    """ROLAND/ directory with a valid WAV file on memory 001 track 1."""
+    root = tmp_path / "ROLAND"
+    data = root / "DATA"
+    wave = root / "WAVE"
+    data.mkdir(parents=True)
+    wave.mkdir(parents=True)
+
+    (data / "MEMORY001A.RC0").write_text(sample_rc0_content, encoding="utf-8")
+
+    # Second memory for multi-slot tests
+    content_002 = sample_rc0_content.replace(
+        '<mem id="0">', '<mem id="1">'
+    ).replace(
+        '<ifx id="0">', '<ifx id="1">'
+    ).replace(
+        '<tfx id="0">', '<tfx id="1">'
+    )
+    (data / "MEMORY002A.RC0").write_text(content_002, encoding="utf-8")
+
+    # Valid WAV for track 1
+    wav_dir = wave / "001_1"
+    wav_dir.mkdir()
+    _make_device_wav(wav_dir / "001_1.WAV", frames=44100)
+
+    return root
+
+
+# --- WAV CLI tests ---
+
+
+class TestWavInfoCommand:
+    def test_wav_info_shows_tracks(
+        self, runner: CliRunner, roland_dir_wav: Path
+    ) -> None:
+        result = runner.invoke(cli, ["wav-info", str(roland_dir_wav), "1"])
+        assert result.exit_code == 0
+        assert "audio" in result.output
+        assert "44100" in result.output
+
+    def test_wav_info_specific_track(
+        self, runner: CliRunner, roland_dir_wav: Path
+    ) -> None:
+        result = runner.invoke(
+            cli, ["wav-info", str(roland_dir_wav), "1", "-t", "1"]
+        )
+        assert result.exit_code == 0
+        assert "audio" in result.output
+
+    def test_wav_info_empty_track(
+        self, runner: CliRunner, roland_dir_wav: Path
+    ) -> None:
+        result = runner.invoke(
+            cli, ["wav-info", str(roland_dir_wav), "1", "-t", "2"]
+        )
+        assert result.exit_code == 0
+        assert "empty" in result.output
+
+    def test_wav_info_nonexistent_memory(
+        self, runner: CliRunner, roland_dir_wav: Path
+    ) -> None:
+        result = runner.invoke(cli, ["wav-info", str(roland_dir_wav), "99"])
+        assert result.exit_code != 0
+        assert "does not exist" in result.output
+
+
+class TestWavExportCommand:
+    def test_export_default_float32(
+        self, runner: CliRunner, roland_dir_wav: Path, tmp_path: Path
+    ) -> None:
+        out = tmp_path / "export.wav"
+        result = runner.invoke(
+            cli, ["wav-export", str(roland_dir_wav), "1", "1", str(out)]
+        )
+        assert result.exit_code == 0
+        assert "Exported" in result.output
+        assert out.exists()
+
+        from eastlight.core.wav import wav_info
+
+        info = wav_info(out)
+        assert info.subtype == "FLOAT"
+        assert info.frames == 44100
+
+    def test_export_pcm24(
+        self, runner: CliRunner, roland_dir_wav: Path, tmp_path: Path
+    ) -> None:
+        out = tmp_path / "export24.wav"
+        result = runner.invoke(
+            cli,
+            ["wav-export", str(roland_dir_wav), "1", "1", str(out), "--format", "pcm24"],
+        )
+        assert result.exit_code == 0
+
+        from eastlight.core.wav import wav_info
+
+        info = wav_info(out)
+        assert info.subtype == "PCM_24"
+
+    def test_export_pcm16(
+        self, runner: CliRunner, roland_dir_wav: Path, tmp_path: Path
+    ) -> None:
+        out = tmp_path / "export16.wav"
+        result = runner.invoke(
+            cli,
+            ["wav-export", str(roland_dir_wav), "1", "1", str(out), "--format", "pcm16"],
+        )
+        assert result.exit_code == 0
+
+        from eastlight.core.wav import wav_info
+
+        info = wav_info(out)
+        assert info.subtype == "PCM_16"
+
+    def test_export_empty_track(
+        self, runner: CliRunner, roland_dir_wav: Path, tmp_path: Path
+    ) -> None:
+        out = tmp_path / "nope.wav"
+        result = runner.invoke(
+            cli, ["wav-export", str(roland_dir_wav), "1", "2", str(out)]
+        )
+        assert result.exit_code != 0
+        assert "no audio" in result.output
+
+    def test_export_nonexistent_memory(
+        self, runner: CliRunner, roland_dir_wav: Path, tmp_path: Path
+    ) -> None:
+        out = tmp_path / "nope.wav"
+        result = runner.invoke(
+            cli, ["wav-export", str(roland_dir_wav), "99", "1", str(out)]
+        )
+        assert result.exit_code != 0
+
+
+class TestWavImportCommand:
+    def test_import_wav(
+        self, runner: CliRunner, roland_dir_wav: Path, tmp_path: Path
+    ) -> None:
+        # Create a source WAV to import
+        src = tmp_path / "source.wav"
+        data = np.zeros((22050, 2), dtype=np.float32)
+        sf.write(str(src), data, DEVICE_SAMPLE_RATE, subtype="FLOAT")
+
+        # Import into track 2 (empty)
+        result = runner.invoke(
+            cli, ["wav-import", str(roland_dir_wav), "1", "2", str(src)]
+        )
+        assert result.exit_code == 0
+        assert "Imported" in result.output
+
+        # Verify WAV was written to device location
+        dst = roland_dir_wav / "WAVE" / "001_2" / "001_2.WAV"
+        assert dst.exists()
+
+        from eastlight.core.wav import wav_info
+
+        info = wav_info(dst)
+        assert info.subtype == "FLOAT"
+        assert info.frames == 22050
+
+    def test_import_mono_converts_to_stereo(
+        self, runner: CliRunner, roland_dir_wav: Path, tmp_path: Path
+    ) -> None:
+        src = tmp_path / "mono.wav"
+        data = np.zeros(11025, dtype=np.float32)
+        sf.write(str(src), data, DEVICE_SAMPLE_RATE, subtype="PCM_16")
+
+        result = runner.invoke(
+            cli, ["wav-import", str(roland_dir_wav), "1", "3", str(src)]
+        )
+        assert result.exit_code == 0
+
+        dst = roland_dir_wav / "WAVE" / "001_3" / "001_3.WAV"
+        assert dst.exists()
+
+        from eastlight.core.wav import wav_info
+
+        info = wav_info(dst)
+        assert info.channels == 2  # mono was converted to stereo
+
+    def test_import_overwrite_prompts(
+        self, runner: CliRunner, roland_dir_wav: Path, tmp_path: Path
+    ) -> None:
+        src = tmp_path / "source.wav"
+        data = np.zeros((1000, 2), dtype=np.float32)
+        sf.write(str(src), data, DEVICE_SAMPLE_RATE, subtype="FLOAT")
+
+        # Track 1 already has audio — decline overwrite
+        result = runner.invoke(
+            cli, ["wav-import", str(roland_dir_wav), "1", "1", str(src)], input="n\n"
+        )
+        assert result.exit_code != 0 or "Aborted" in result.output
+
+    def test_import_overwrite_force(
+        self, runner: CliRunner, roland_dir_wav: Path, tmp_path: Path
+    ) -> None:
+        src = tmp_path / "source.wav"
+        data = np.zeros((1000, 2), dtype=np.float32)
+        sf.write(str(src), data, DEVICE_SAMPLE_RATE, subtype="FLOAT")
+
+        result = runner.invoke(
+            cli,
+            ["wav-import", str(roland_dir_wav), "1", "1", str(src), "--force"],
+        )
+        assert result.exit_code == 0
+        assert "Imported" in result.output
+
+    def test_import_wrong_sample_rate(
+        self, runner: CliRunner, roland_dir_wav: Path, tmp_path: Path
+    ) -> None:
+        src = tmp_path / "48k.wav"
+        data = np.zeros((1000, 2), dtype=np.float32)
+        sf.write(str(src), data, 48000, subtype="FLOAT")
+
+        result = runner.invoke(
+            cli, ["wav-import", str(roland_dir_wav), "1", "2", str(src)]
+        )
+        assert result.exit_code != 0
+        assert "sample rate" in result.output.lower()
+
+    def test_import_updates_rc0_metadata(
+        self, runner: CliRunner, roland_dir_wav: Path, tmp_path: Path
+    ) -> None:
+        src = tmp_path / "source.wav"
+        frames = 22050
+        data = np.zeros((frames, 2), dtype=np.float32)
+        sf.write(str(src), data, DEVICE_SAMPLE_RATE, subtype="FLOAT")
+
+        result = runner.invoke(
+            cli, ["wav-import", str(roland_dir_wav), "1", "2", str(src)]
+        )
+        assert result.exit_code == 0
+
+        # Verify RC0 metadata was updated
+        rc0 = parse_memory_file(roland_dir_wav / "DATA" / "MEMORY001A.RC0")
+        track2 = rc0.mem["TRACK2"]
+        assert track2["W"] == 1  # has_audio
+        assert track2["X"] == frames  # total_samples

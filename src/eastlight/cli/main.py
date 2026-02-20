@@ -12,6 +12,14 @@ from eastlight.core.library import RC505Library
 from eastlight.core.model import Memory
 from eastlight.core.parser import parse_memory_file
 from eastlight.core.schema import SchemaRegistry
+from eastlight.core.wav import (
+    DEVICE_SAMPLE_RATE,
+    ExportFormat,
+    import_audio,
+    wav_export,
+    wav_info,
+    wav_write_device,
+)
 from eastlight.core.writer import write_rc0
 
 console = Console()
@@ -358,6 +366,199 @@ def diff(roland_dir: str, mem_a: int, mem_b: int, section: str | None) -> None:
         console.print("[dim]No differences found.[/dim]")
     else:
         console.print(f"[bold]{total_diffs}[/bold] difference(s) found.")
+
+
+# --- WAV commands ---
+
+
+@cli.command("wav-info")
+@click.argument("roland_dir", type=click.Path(exists=True, file_okay=False))
+@click.argument("memory_num", type=int)
+@click.option("--track", "-t", type=int, default=None, help="Show only this track (1-5)")
+def wav_info_cmd(roland_dir: str, memory_num: int, track: int | None) -> None:
+    """Show WAV audio info for a memory's tracks.
+
+    Example: eastlight wav-info ROLAND 1
+    """
+    lib = RC505Library(roland_dir)
+    slot = lib.memory_slot(memory_num)
+
+    if not slot.exists:
+        raise click.ClickException(f"Memory {memory_num:03d} does not exist.")
+
+    tracks = [track] if track else range(1, 6)
+
+    table = Table(title=f"Memory {memory_num:03d} — Audio Tracks")
+    table.add_column("Track", style="cyan", justify="right")
+    table.add_column("Status", justify="center")
+    table.add_column("Duration", justify="right")
+    table.add_column("Sample Rate", justify="right")
+    table.add_column("Channels", justify="right")
+    table.add_column("Format", style="dim")
+
+    found = False
+    for t in tracks:
+        wav_path = slot.track_wav(t)
+        if wav_path is None:
+            table.add_row(str(t), "[dim]empty[/dim]", "-", "-", "-", "-")
+            continue
+
+        found = True
+        info = wav_info(wav_path)
+        minutes = int(info.duration // 60)
+        seconds = info.duration % 60
+        dur_str = f"{minutes}:{seconds:05.2f}" if minutes else f"{seconds:.2f}s"
+
+        table.add_row(
+            str(t),
+            "[green]audio[/green]",
+            dur_str,
+            f"{info.sample_rate} Hz",
+            str(info.channels),
+            f"{info.subtype} {info.format}",
+        )
+
+    console.print(table)
+
+    if not found and track:
+        console.print(f"[dim]Track {track} has no audio.[/dim]")
+
+
+@cli.command("wav-export")
+@click.argument("roland_dir", type=click.Path(exists=True, file_okay=False))
+@click.argument("memory_num", type=int)
+@click.argument("track_num", type=int)
+@click.argument("output", type=click.Path(dir_okay=False))
+@click.option(
+    "--format",
+    "fmt",
+    type=click.Choice(["float32", "pcm24", "pcm16"]),
+    default="float32",
+    help="Export format (default: float32 — native lossless)",
+)
+def wav_export_cmd(
+    roland_dir: str, memory_num: int, track_num: int, output: str, fmt: str
+) -> None:
+    """Export a track's audio to a WAV file.
+
+    Default format is 32-bit float (native, lossless). Use --format pcm24
+    for DAW compatibility, or pcm16 for maximum compatibility.
+
+    Example: eastlight wav-export ROLAND 1 1 my_loop.wav
+    """
+    lib = RC505Library(roland_dir)
+    slot = lib.memory_slot(memory_num)
+
+    if not slot.exists:
+        raise click.ClickException(f"Memory {memory_num:03d} does not exist.")
+
+    wav_path = slot.track_wav(track_num)
+    if wav_path is None:
+        raise click.ClickException(
+            f"Track {track_num} of memory {memory_num:03d} has no audio."
+        )
+
+    format_map = {
+        "float32": ExportFormat.FLOAT_32,
+        "pcm24": ExportFormat.PCM_24,
+        "pcm16": ExportFormat.PCM_16,
+    }
+    export_fmt = format_map[fmt]
+
+    from eastlight.core.wav import wav_read
+
+    data, sr = wav_read(wav_path)
+    out_path = Path(output)
+    wav_export(out_path, data, sr, export_fmt)
+
+    info = wav_info(out_path)
+    console.print(
+        f"[green]Exported[/green] memory {memory_num:03d} track {track_num} → {out_path.name} "
+        f"({info.subtype}, {info.duration:.2f}s)"
+    )
+
+
+@cli.command("wav-import")
+@click.argument("roland_dir", type=click.Path(exists=True, file_okay=False))
+@click.argument("memory_num", type=int)
+@click.argument("track_num", type=int)
+@click.argument("input_file", type=click.Path(exists=True, dir_okay=False))
+@click.option("--force", is_flag=True, help="Overwrite existing track audio without prompting")
+def wav_import_cmd(
+    roland_dir: str,
+    memory_num: int,
+    track_num: int,
+    input_file: str,
+    force: bool,
+) -> None:
+    """Import an audio file into a memory track.
+
+    Accepts WAV, FLAC, OGG, and other formats supported by libsndfile.
+    Audio is converted to 32-bit float stereo at 44.1kHz (the device's
+    native format). Mono files are duplicated to stereo.
+
+    Example: eastlight wav-import ROLAND 1 1 my_recording.wav
+    """
+    lib = RC505Library(roland_dir)
+    slot = lib.memory_slot(memory_num)
+
+    if not slot.exists:
+        raise click.ClickException(f"Memory {memory_num:03d} does not exist.")
+
+    if not 1 <= track_num <= 5:
+        raise click.ClickException(f"Track number must be 1-5, got {track_num}.")
+
+    # Check for existing audio
+    existing = slot.track_wav(track_num)
+    if existing is not None and not force:
+        if not click.confirm(
+            f"Track {track_num} already has audio. Overwrite?"
+        ):
+            raise click.Abort()
+
+    # Import and convert audio
+    data, sr = import_audio(input_file)
+
+    if sr != DEVICE_SAMPLE_RATE:
+        raise click.ClickException(
+            f"Sample rate mismatch: source is {sr} Hz, device requires {DEVICE_SAMPLE_RATE} Hz. "
+            f"Please resample your audio to {DEVICE_SAMPLE_RATE} Hz before importing."
+        )
+
+    # Write to device WAV location
+    wav_dir = lib.wave_dir / f"{memory_num:03d}_{track_num}"
+    wav_dir.mkdir(parents=True, exist_ok=True)
+    dst_path = wav_dir / f"{memory_num:03d}_{track_num}.WAV"
+    wav_write_device(dst_path, data, sr)
+
+    # Update track metadata in the RC0 file
+    registry = _load_registry()
+    rc0 = lib.parse_memory(memory_num)
+    mem = Memory(rc0, registry)
+    track = mem.track(track_num)
+    if track is not None:
+        total_samples = data.shape[0]
+        track.set_by_tag("W", 1)  # has_audio = true
+        track.set_by_tag("X", total_samples)  # total_samples
+        # Compute samples_per_measure from tempo if available
+        tempo_x10 = track.get_by_tag("U")
+        if tempo_x10 and tempo_x10 > 0:
+            bpm = tempo_x10 / 10.0
+            samples_per_beat = DEVICE_SAMPLE_RATE * 60.0 / bpm
+            samples_per_measure = int(samples_per_beat * 4)
+            track.set_by_tag("V", samples_per_measure)
+            # Compute loop length in measures
+            if samples_per_measure > 0:
+                measures = round(total_samples / samples_per_measure)
+                track.set_by_tag("S", max(1, measures))
+        lib.save_memory(memory_num, rc0)
+
+    dur = data.shape[0] / sr
+    console.print(
+        f"[green]Imported[/green] {Path(input_file).name} → "
+        f"memory {memory_num:03d} track {track_num} "
+        f"({dur:.2f}s, {data.shape[0]} samples)"
+    )
 
 
 if __name__ == "__main__":
