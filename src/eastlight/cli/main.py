@@ -804,6 +804,176 @@ def fx_set(
     )
 
 
+# --- System commands ---
+
+
+# System sections that are useful to display in a summary view
+_SYSTEM_KEY_SECTIONS = ["SETUP", "PREF", "COLOR", "USB", "MIDI"]
+
+
+@cli.command("sys-show")
+@click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
+              default=None, help="ROLAND/ directory (default: config or auto-detect)")
+@click.option("--section", "-s", help="Show only this section (e.g., SETUP, PREF, MIDI)")
+@click.option("--all", "show_all", is_flag=True, help="Show all sections including controllers")
+@click.option("--raw", is_flag=True, help="Show raw tag names instead of resolved names")
+@click.option("--variant", type=click.Choice(["1", "2"]), default="1",
+              help="System file variant (default: 1)")
+def sys_show(
+    roland_dir: str | None,
+    section: str | None,
+    show_all: bool,
+    raw: bool,
+    variant: str,
+) -> None:
+    """Show system settings.
+
+    By default shows key sections (SETUP, PREF, COLOR, USB, MIDI).
+    Use --all to include controller mappings (ICTL/ECTL) and
+    shared sections (INPUT, OUTPUT, ROUTING, MIXER, EQ, etc.).
+
+    Examples:
+
+    \b
+      eastlight sys-show
+      eastlight sys-show -s SETUP
+      eastlight sys-show --all
+      eastlight sys-show -s PREF --raw
+    """
+    roland_dir = _resolve_dir(roland_dir)
+    lib = RC505Library(roland_dir)
+    registry = _load_registry()
+    rc0 = lib.parse_system(int(variant))
+
+    sys_elem = rc0.sys
+    if sys_elem is None:
+        raise click.ClickException("No <sys> element in system file.")
+
+    console.print(f"[bold]System Settings[/bold] (SYSTEM{variant}.RC0)")
+    console.print()
+
+    if section:
+        sections_to_show = [section.upper()]
+    elif show_all:
+        sections_to_show = list(sys_elem.section_names)
+    else:
+        sections_to_show = [s for s in _SYSTEM_KEY_SECTIONS if s in sys_elem.section_names]
+
+    for sec_name in sections_to_show:
+        sec = sys_elem.sections.get(sec_name)
+        if sec is None:
+            continue
+
+        if not sec.fields:
+            continue
+
+        schema = registry.get(sec_name)
+
+        table = Table(title=sec_name, show_header=True)
+        table.add_column("Tag", style="dim", width=4)
+        table.add_column("Parameter", style="cyan", min_width=20)
+        table.add_column("Value", justify="right")
+        table.add_column("Display", style="green")
+
+        for tag, value in sec.fields.items():
+            if raw or schema is None:
+                param_name = tag
+                display_val = str(value)
+            else:
+                fd = schema.fields.get(tag)
+                if fd:
+                    param_name = fd.display or fd.name
+                    if fd.choices and value in fd.choices:
+                        display_val = fd.choices[value]
+                    elif fd.unit:
+                        display_val = f"{value} {fd.unit}"
+                    else:
+                        display_val = str(value)
+                else:
+                    param_name = tag
+                    display_val = str(value)
+
+            table.add_row(tag, param_name, str(value), display_val)
+
+        console.print(table)
+        console.print()
+
+
+@cli.command("sys-set")
+@click.argument("section_name")
+@click.argument("param_name")
+@click.argument("value", type=int)
+@click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
+              default=None, help="ROLAND/ directory (default: config or auto-detect)")
+@click.option("--variant", type=click.Choice(["1", "2"]), default="1",
+              help="System file variant (default: 1)")
+def sys_set(
+    section_name: str,
+    param_name: str,
+    value: int,
+    roland_dir: str | None,
+    variant: str,
+) -> None:
+    """Set a system parameter value.
+
+    SECTION_NAME is the section (e.g., SETUP, PREF, MIDI).
+    PARAM_NAME can be a schema name (e.g., 'contrast') or raw tag (e.g., 'D').
+
+    Examples:
+
+    \b
+      eastlight sys-set SETUP contrast 8
+      eastlight sys-set SETUP auto_off 2
+      eastlight sys-set PREF pref_eq 0
+      eastlight sys-set MIDI A 1
+    """
+    roland_dir = _resolve_dir(roland_dir)
+    lib = RC505Library(roland_dir)
+    registry = _load_registry()
+    var_int = int(variant)
+    rc0 = lib.parse_system(var_int)
+
+    sys_elem = rc0.sys
+    if sys_elem is None:
+        raise click.ClickException("No <sys> element in system file.")
+
+    section_name = section_name.upper()
+    sec = sys_elem.sections.get(section_name)
+    if sec is None:
+        raise click.ClickException(
+            f"Section '{section_name}' not found in SYSTEM{variant}.RC0. "
+            f"Use 'eastlight sys-show --all' to see available sections."
+        )
+
+    schema = registry.get(section_name)
+
+    # Resolve param_name to tag
+    tag = None
+    if schema:
+        tag = schema.name_to_tag(param_name)
+
+    if tag is None:
+        if param_name in sec.fields:
+            tag = param_name
+        else:
+            raise click.ClickException(
+                f"Parameter '{param_name}' not found in {section_name}."
+            )
+
+    old_value = sec.get(tag)
+    sec[tag] = value
+    lib.save_system(rc0, var_int)
+
+    display_name = param_name
+    if schema and tag != param_name:
+        display_name = f"{param_name} ({tag})"
+
+    console.print(
+        f"[green]Set[/green] SYSTEM{variant}.{section_name}.{display_name}: "
+        f"{old_value} → {value}"
+    )
+
+
 # --- Device & config commands ---
 
 

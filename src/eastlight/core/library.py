@@ -252,6 +252,18 @@ class RC505Library:
         path = self.data_dir / f"SYSTEM{variant}.RC0"
         return parse_system_file(path)
 
+    def save_system(self, rc0: RC0File, variant: int = 1) -> Path:
+        """Write a system RC0 file back to disk.
+
+        Automatically backs up the existing file before overwriting.
+        """
+        if variant not in (1, 2):
+            raise ValueError(f"System variant must be 1 or 2, got {variant}")
+        path = self.data_dir / f"SYSTEM{variant}.RC0"
+        self._backup_file(path)
+        write_rc0(rc0, path)
+        return path
+
     def memory_name(self, number: int) -> str:
         """Read the display name of a memory slot."""
         rc0 = self.parse_memory(number)
