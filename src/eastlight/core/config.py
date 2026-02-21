@@ -60,6 +60,49 @@ def save_config(config: Config, path: Path | None = None) -> Path:
     return path
 
 
+def resolve_roland_dir(
+    explicit: str | None = None, config_path: Path | None = None
+) -> Path:
+    """Resolve ROLAND/ directory from explicit path, config, or auto-detection.
+
+    Resolution order:
+      1. Explicit path (CLI argument or option)
+      2. Config ``roland_dir`` setting
+      3. Single auto-detected device
+
+    Raises:
+        ValueError: If no directory can be resolved, or multiple devices
+            are detected without a configured default.
+    """
+    if explicit:
+        path = Path(explicit)
+        if not path.exists():
+            raise ValueError(f"Directory not found: {path}")
+        return path
+
+    cfg = load_config(config_path)
+    if cfg.roland_dir:
+        path = Path(cfg.roland_dir)
+        if path.exists():
+            return path
+
+    devices = detect_device()
+    if len(devices) == 1:
+        return devices[0]
+    elif len(devices) > 1:
+        lines = [f"  {i}. {p}" for i, p in enumerate(devices, 1)]
+        raise ValueError(
+            "Multiple RC-505 MK2 devices found:\n"
+            + "\n".join(lines)
+            + "\n\nSet a default: eastlight config --set-dir <path>"
+        )
+
+    raise ValueError(
+        "No ROLAND/ directory found. Provide one with -d/--dir, "
+        "or set a default: eastlight config --set-dir <path>"
+    )
+
+
 def _is_roland_dir(path: Path) -> bool:
     """Check if a path looks like a valid RC-505 MK2 ROLAND/ directory."""
     return (

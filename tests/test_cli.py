@@ -61,30 +61,30 @@ def runner() -> CliRunner:
 
 class TestListCommand:
     def test_list_shows_memories(self, runner: CliRunner, roland_dir: Path) -> None:
-        result = runner.invoke(cli, ["list", str(roland_dir)])
+        result = runner.invoke(cli, ["list", "-d", str(roland_dir)])
         assert result.exit_code == 0
         assert "Memory 1" in result.output
         assert "Loop 2" in result.output
 
     def test_list_nonexistent_dir(self, runner: CliRunner) -> None:
-        result = runner.invoke(cli, ["list", "/nonexistent/path"])
+        result = runner.invoke(cli, ["list", "-d", "/nonexistent/path"])
         assert result.exit_code != 0
 
 
 class TestShowCommand:
     def test_show_memory(self, runner: CliRunner, roland_dir: Path) -> None:
-        result = runner.invoke(cli, ["show", str(roland_dir), "1"])
+        result = runner.invoke(cli, ["show", "1", "-d", str(roland_dir)])
         assert result.exit_code == 0
         assert "Memory 001" in result.output
         assert "Memory 1" in result.output
 
     def test_show_specific_section(self, runner: CliRunner, roland_dir: Path) -> None:
-        result = runner.invoke(cli, ["show", str(roland_dir), "1", "-s", "TRACK1"])
+        result = runner.invoke(cli, ["show", "1", "-d", str(roland_dir), "-s", "TRACK1"])
         assert result.exit_code == 0
         assert "TRACK1" in result.output
 
     def test_show_raw_mode(self, runner: CliRunner, roland_dir: Path) -> None:
-        result = runner.invoke(cli, ["show", str(roland_dir), "1", "--raw"])
+        result = runner.invoke(cli, ["show", "1", "-d", str(roland_dir), "--raw"])
         assert result.exit_code == 0
 
 
@@ -100,7 +100,7 @@ class TestParseCommand:
 class TestSetCommand:
     def test_set_by_name(self, runner: CliRunner, roland_dir: Path) -> None:
         result = runner.invoke(
-            cli, ["set", str(roland_dir), "1", "TRACK1", "pan", "75"]
+            cli, ["set", "1", "TRACK1", "pan", "75", "-d", str(roland_dir)]
         )
         assert result.exit_code == 0
         assert "Set" in result.output
@@ -114,7 +114,7 @@ class TestSetCommand:
 
     def test_set_by_tag(self, runner: CliRunner, roland_dir: Path) -> None:
         result = runner.invoke(
-            cli, ["set", str(roland_dir), "1", "TRACK1", "C", "60"]
+            cli, ["set", "1", "TRACK1", "C", "60", "-d", str(roland_dir)]
         )
         assert result.exit_code == 0
         assert "Set" in result.output
@@ -124,14 +124,14 @@ class TestSetCommand:
 
     def test_set_invalid_section(self, runner: CliRunner, roland_dir: Path) -> None:
         result = runner.invoke(
-            cli, ["set", str(roland_dir), "1", "NONEXISTENT", "pan", "50"]
+            cli, ["set", "1", "NONEXISTENT", "pan", "50", "-d", str(roland_dir)]
         )
         assert result.exit_code != 0
         assert "not found" in result.output
 
     def test_set_invalid_param(self, runner: CliRunner, roland_dir: Path) -> None:
         result = runner.invoke(
-            cli, ["set", str(roland_dir), "1", "TRACK1", "zzz_fake", "50"]
+            cli, ["set", "1", "TRACK1", "zzz_fake", "50", "-d", str(roland_dir)]
         )
         assert result.exit_code != 0
         assert "not found" in result.output
@@ -139,7 +139,7 @@ class TestSetCommand:
 
 class TestNameCommand:
     def test_rename_memory(self, runner: CliRunner, roland_dir: Path) -> None:
-        result = runner.invoke(cli, ["name", str(roland_dir), "1", "New Name"])
+        result = runner.invoke(cli, ["name", "1", "New Name", "-d", str(roland_dir)])
         assert result.exit_code == 0
         assert "Renamed" in result.output
         assert "Memory 1" in result.output  # old name
@@ -160,7 +160,7 @@ class TestNameCommand:
         self, runner: CliRunner, roland_dir: Path
     ) -> None:
         result = runner.invoke(
-            cli, ["name", str(roland_dir), "1", "This Is A Very Long Name"]
+            cli, ["name", "1", "This Is A Very Long Name", "-d", str(roland_dir)]
         )
         assert result.exit_code == 0
         assert "Renamed" in result.output
@@ -168,7 +168,7 @@ class TestNameCommand:
 
 class TestCopyCommand:
     def test_copy_to_empty_slot(self, runner: CliRunner, roland_dir: Path) -> None:
-        result = runner.invoke(cli, ["copy", str(roland_dir), "1", "50"])
+        result = runner.invoke(cli, ["copy", "1", "50", "-d", str(roland_dir)])
         assert result.exit_code == 0
         assert "Copied" in result.output
         assert "001" in result.output
@@ -183,7 +183,7 @@ class TestCopyCommand:
         assert rc0.mem.id == 49  # 0-indexed: slot 50 → id 49
 
     def test_copy_preserves_audio(self, runner: CliRunner, roland_dir: Path) -> None:
-        result = runner.invoke(cli, ["copy", str(roland_dir), "1", "50"])
+        result = runner.invoke(cli, ["copy", "1", "50", "-d", str(roland_dir)])
         assert result.exit_code == 0
 
         # WAV should be copied
@@ -192,12 +192,12 @@ class TestCopyCommand:
 
     def test_copy_overwrite_prompts(self, runner: CliRunner, roland_dir: Path) -> None:
         # Copy to slot 2 which already exists — decline
-        result = runner.invoke(cli, ["copy", str(roland_dir), "1", "2"], input="n\n")
+        result = runner.invoke(cli, ["copy", "1", "2", "-d", str(roland_dir)], input="n\n")
         assert result.exit_code != 0 or "Aborted" in result.output
 
     def test_copy_overwrite_force(self, runner: CliRunner, roland_dir: Path) -> None:
         result = runner.invoke(
-            cli, ["copy", str(roland_dir), "1", "2", "--force"]
+            cli, ["copy", "1", "2", "-d", str(roland_dir), "--force"]
         )
         assert result.exit_code == 0
         assert "Copied" in result.output
@@ -205,14 +205,14 @@ class TestCopyCommand:
     def test_copy_nonexistent_source(
         self, runner: CliRunner, roland_dir: Path
     ) -> None:
-        result = runner.invoke(cli, ["copy", str(roland_dir), "99", "50"])
+        result = runner.invoke(cli, ["copy", "99", "50", "-d", str(roland_dir)])
         assert result.exit_code != 0
         assert "does not exist" in result.output
 
 
 class TestSwapCommand:
     def test_swap_memories(self, runner: CliRunner, roland_dir: Path) -> None:
-        result = runner.invoke(cli, ["swap", str(roland_dir), "1", "2"])
+        result = runner.invoke(cli, ["swap", "1", "2", "-d", str(roland_dir)])
         assert result.exit_code == 0
         assert "Swapped" in result.output
 
@@ -232,14 +232,14 @@ class TestSwapCommand:
 
     def test_swap_preserves_audio(self, runner: CliRunner, roland_dir: Path) -> None:
         # Memory 1 has audio at 001_1, memory 2 has none
-        result = runner.invoke(cli, ["swap", str(roland_dir), "1", "2"])
+        result = runner.invoke(cli, ["swap", "1", "2", "-d", str(roland_dir)])
         assert result.exit_code == 0
 
         # Audio should move from 001_1 to 002_1
         assert (roland_dir / "WAVE" / "002_1" / "002_1.WAV").exists()
 
     def test_swap_nonexistent(self, runner: CliRunner, roland_dir: Path) -> None:
-        result = runner.invoke(cli, ["swap", str(roland_dir), "1", "99"])
+        result = runner.invoke(cli, ["swap", "1", "99", "-d", str(roland_dir)])
         assert result.exit_code != 0
         assert "does not exist" in result.output
 
@@ -247,27 +247,27 @@ class TestSwapCommand:
 class TestDiffCommand:
     def test_diff_identical(self, runner: CliRunner, roland_dir: Path) -> None:
         # Copy memory 1 to slot 3, then diff — should be identical (except IDs)
-        runner.invoke(cli, ["copy", str(roland_dir), "1", "3"])
-        result = runner.invoke(cli, ["diff", str(roland_dir), "1", "3"])
+        runner.invoke(cli, ["copy", "1", "3", "-d", str(roland_dir)])
+        result = runner.invoke(cli, ["diff", "1", "3", "-d", str(roland_dir)])
         assert result.exit_code == 0
         # NAME section will differ (same bytes since copy preserves name)
         # but other sections should be identical
 
     def test_diff_different(self, runner: CliRunner, roland_dir: Path) -> None:
-        result = runner.invoke(cli, ["diff", str(roland_dir), "1", "2"])
+        result = runner.invoke(cli, ["diff", "1", "2", "-d", str(roland_dir)])
         assert result.exit_code == 0
         assert "difference" in result.output.lower()
 
     def test_diff_section_filter(self, runner: CliRunner, roland_dir: Path) -> None:
         result = runner.invoke(
-            cli, ["diff", str(roland_dir), "1", "2", "-s", "NAME"]
+            cli, ["diff", "1", "2", "-d", str(roland_dir), "-s", "NAME"]
         )
         assert result.exit_code == 0
 
     def test_diff_shows_param_names(self, runner: CliRunner, roland_dir: Path) -> None:
         # Modify a known param in memory 1 then diff
-        runner.invoke(cli, ["set", str(roland_dir), "1", "TRACK1", "pan", "75"])
-        result = runner.invoke(cli, ["diff", str(roland_dir), "1", "2"])
+        runner.invoke(cli, ["set", "1", "TRACK1", "pan", "75", "-d", str(roland_dir)])
+        result = runner.invoke(cli, ["diff", "1", "2", "-d", str(roland_dir)])
         assert result.exit_code == 0
         # Should show difference in pan (tag C)
 
@@ -317,7 +317,7 @@ class TestWavInfoCommand:
     def test_wav_info_shows_tracks(
         self, runner: CliRunner, roland_dir_wav: Path
     ) -> None:
-        result = runner.invoke(cli, ["wav-info", str(roland_dir_wav), "1"])
+        result = runner.invoke(cli, ["wav-info", "1", "-d", str(roland_dir_wav)])
         assert result.exit_code == 0
         assert "audio" in result.output
         assert "44100" in result.output
@@ -326,7 +326,7 @@ class TestWavInfoCommand:
         self, runner: CliRunner, roland_dir_wav: Path
     ) -> None:
         result = runner.invoke(
-            cli, ["wav-info", str(roland_dir_wav), "1", "-t", "1"]
+            cli, ["wav-info", "1", "-d", str(roland_dir_wav), "-t", "1"]
         )
         assert result.exit_code == 0
         assert "audio" in result.output
@@ -335,7 +335,7 @@ class TestWavInfoCommand:
         self, runner: CliRunner, roland_dir_wav: Path
     ) -> None:
         result = runner.invoke(
-            cli, ["wav-info", str(roland_dir_wav), "1", "-t", "2"]
+            cli, ["wav-info", "1", "-d", str(roland_dir_wav), "-t", "2"]
         )
         assert result.exit_code == 0
         assert "empty" in result.output
@@ -343,7 +343,7 @@ class TestWavInfoCommand:
     def test_wav_info_nonexistent_memory(
         self, runner: CliRunner, roland_dir_wav: Path
     ) -> None:
-        result = runner.invoke(cli, ["wav-info", str(roland_dir_wav), "99"])
+        result = runner.invoke(cli, ["wav-info", "99", "-d", str(roland_dir_wav)])
         assert result.exit_code != 0
         assert "does not exist" in result.output
 
@@ -354,7 +354,7 @@ class TestWavExportCommand:
     ) -> None:
         out = tmp_path / "export.wav"
         result = runner.invoke(
-            cli, ["wav-export", str(roland_dir_wav), "1", "1", str(out)]
+            cli, ["wav-export", "1", "1", str(out), "-d", str(roland_dir_wav)]
         )
         assert result.exit_code == 0
         assert "Exported" in result.output
@@ -372,7 +372,7 @@ class TestWavExportCommand:
         out = tmp_path / "export24.wav"
         result = runner.invoke(
             cli,
-            ["wav-export", str(roland_dir_wav), "1", "1", str(out), "--format", "pcm24"],
+            ["wav-export", "1", "1", str(out), "-d", str(roland_dir_wav), "--format", "pcm24"],
         )
         assert result.exit_code == 0
 
@@ -387,7 +387,7 @@ class TestWavExportCommand:
         out = tmp_path / "export16.wav"
         result = runner.invoke(
             cli,
-            ["wav-export", str(roland_dir_wav), "1", "1", str(out), "--format", "pcm16"],
+            ["wav-export", "1", "1", str(out), "-d", str(roland_dir_wav), "--format", "pcm16"],
         )
         assert result.exit_code == 0
 
@@ -401,7 +401,7 @@ class TestWavExportCommand:
     ) -> None:
         out = tmp_path / "nope.wav"
         result = runner.invoke(
-            cli, ["wav-export", str(roland_dir_wav), "1", "2", str(out)]
+            cli, ["wav-export", "1", "2", str(out), "-d", str(roland_dir_wav)]
         )
         assert result.exit_code != 0
         assert "no audio" in result.output
@@ -411,7 +411,7 @@ class TestWavExportCommand:
     ) -> None:
         out = tmp_path / "nope.wav"
         result = runner.invoke(
-            cli, ["wav-export", str(roland_dir_wav), "99", "1", str(out)]
+            cli, ["wav-export", "99", "1", str(out), "-d", str(roland_dir_wav)]
         )
         assert result.exit_code != 0
 
@@ -427,7 +427,7 @@ class TestWavImportCommand:
 
         # Import into track 2 (empty)
         result = runner.invoke(
-            cli, ["wav-import", str(roland_dir_wav), "1", "2", str(src)]
+            cli, ["wav-import", "1", "2", str(src), "-d", str(roland_dir_wav)]
         )
         assert result.exit_code == 0
         assert "Imported" in result.output
@@ -450,7 +450,7 @@ class TestWavImportCommand:
         sf.write(str(src), data, DEVICE_SAMPLE_RATE, subtype="PCM_16")
 
         result = runner.invoke(
-            cli, ["wav-import", str(roland_dir_wav), "1", "3", str(src)]
+            cli, ["wav-import", "1", "3", str(src), "-d", str(roland_dir_wav)]
         )
         assert result.exit_code == 0
 
@@ -471,7 +471,7 @@ class TestWavImportCommand:
 
         # Track 1 already has audio — decline overwrite
         result = runner.invoke(
-            cli, ["wav-import", str(roland_dir_wav), "1", "1", str(src)], input="n\n"
+            cli, ["wav-import", "1", "1", str(src), "-d", str(roland_dir_wav)], input="n\n"
         )
         assert result.exit_code != 0 or "Aborted" in result.output
 
@@ -484,7 +484,7 @@ class TestWavImportCommand:
 
         result = runner.invoke(
             cli,
-            ["wav-import", str(roland_dir_wav), "1", "1", str(src), "--force"],
+            ["wav-import", "1", "1", str(src), "-d", str(roland_dir_wav), "--force"],
         )
         assert result.exit_code == 0
         assert "Imported" in result.output
@@ -497,7 +497,7 @@ class TestWavImportCommand:
         sf.write(str(src), data, 48000, subtype="FLOAT")
 
         result = runner.invoke(
-            cli, ["wav-import", str(roland_dir_wav), "1", "2", str(src)]
+            cli, ["wav-import", "1", "2", str(src), "-d", str(roland_dir_wav)]
         )
         assert result.exit_code != 0
         assert "sample rate" in result.output.lower()
@@ -511,7 +511,7 @@ class TestWavImportCommand:
         sf.write(str(src), data, DEVICE_SAMPLE_RATE, subtype="FLOAT")
 
         result = runner.invoke(
-            cli, ["wav-import", str(roland_dir_wav), "1", "2", str(src)]
+            cli, ["wav-import", "1", "2", str(src), "-d", str(roland_dir_wav)]
         )
         assert result.exit_code == 0
 

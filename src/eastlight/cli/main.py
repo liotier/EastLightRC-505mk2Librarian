@@ -8,7 +8,7 @@ import click
 from rich.console import Console
 from rich.table import Table
 
-from eastlight.core.config import detect_device, load_config, save_config
+from eastlight.core.config import detect_device, load_config, resolve_roland_dir, save_config
 from eastlight.core.library import RC505Library
 from eastlight.core.model import Memory
 from eastlight.core.parser import parse_memory_file
@@ -33,6 +33,14 @@ def _load_registry() -> SchemaRegistry:
     return registry
 
 
+def _resolve_dir(roland_dir: str | None) -> str:
+    """Resolve ROLAND directory, raising ClickException on failure."""
+    try:
+        return str(resolve_roland_dir(roland_dir))
+    except ValueError as e:
+        raise click.ClickException(str(e))
+
+
 def _open_memory(roland_dir: str, memory_num: int) -> tuple[RC505Library, Memory, SchemaRegistry]:
     """Parse a memory and return (library, memory, registry) for reuse."""
     lib = RC505Library(roland_dir)
@@ -48,9 +56,11 @@ def cli() -> None:
 
 
 @cli.command("list")
-@click.argument("roland_dir", type=click.Path(exists=True, file_okay=False))
-def list_cmd(roland_dir: str) -> None:
+@click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
+              default=None, help="ROLAND/ directory (default: config or auto-detect)")
+def list_cmd(roland_dir: str | None) -> None:
     """List all memories in a ROLAND/ backup directory."""
+    roland_dir = _resolve_dir(roland_dir)
     lib = RC505Library(roland_dir)
     registry = _load_registry()
 
@@ -98,12 +108,14 @@ def list_cmd(roland_dir: str) -> None:
 
 
 @cli.command()
-@click.argument("roland_dir", type=click.Path(exists=True, file_okay=False))
 @click.argument("memory_num", type=int)
+@click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
+              default=None, help="ROLAND/ directory (default: config or auto-detect)")
 @click.option("--section", "-s", help="Show only this section (e.g., TRACK1, MASTER)")
 @click.option("--raw", is_flag=True, help="Show raw tag names instead of resolved names")
-def show(roland_dir: str, memory_num: int, section: str | None, raw: bool) -> None:
+def show(memory_num: int, roland_dir: str | None, section: str | None, raw: bool) -> None:
     """Show parameters for a memory slot."""
+    roland_dir = _resolve_dir(roland_dir)
     _, mem, _ = _open_memory(roland_dir, memory_num)
 
     console.print(f"[bold]Memory {memory_num:03d}[/bold]: {mem.name or '(unnamed)'}")
@@ -174,28 +186,30 @@ def parse(rc0_file: str) -> None:
 
 
 @cli.command("set")
-@click.argument("roland_dir", type=click.Path(exists=True, file_okay=False))
 @click.argument("memory_num", type=int)
 @click.argument("section_name")
 @click.argument("param_name")
 @click.argument("value", type=int)
+@click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
+              default=None, help="ROLAND/ directory (default: config or auto-detect)")
 def set_cmd(
-    roland_dir: str,
     memory_num: int,
     section_name: str,
     param_name: str,
     value: int,
+    roland_dir: str | None,
 ) -> None:
     """Set a parameter value in a memory.
 
-    Example: eastlight set ROLAND 1 MASTER tempo_x10 800
+    Example: eastlight set 1 MASTER tempo_x10 800
     """
+    roland_dir = _resolve_dir(roland_dir)
     lib, mem, _ = _open_memory(roland_dir, memory_num)
     resolved = mem.section(section_name)
     if resolved is None:
         raise click.ClickException(
             f"Section '{section_name}' not found in memory {memory_num:03d}. "
-            f"Use 'eastlight show {roland_dir} {memory_num}' to see available sections."
+            f"Use 'eastlight show {memory_num}' to see available sections."
         )
 
     old_value = resolved.get_by_name(param_name)
@@ -220,14 +234,16 @@ def set_cmd(
 
 
 @cli.command()
-@click.argument("roland_dir", type=click.Path(exists=True, file_okay=False))
 @click.argument("memory_num", type=int)
 @click.argument("new_name")
-def name(roland_dir: str, memory_num: int, new_name: str) -> None:
+@click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
+              default=None, help="ROLAND/ directory (default: config or auto-detect)")
+def name(memory_num: int, new_name: str, roland_dir: str | None) -> None:
     """Rename a memory slot.
 
-    Example: eastlight name ROLAND 1 "My Loop"
+    Example: eastlight name 1 "My Loop"
     """
+    roland_dir = _resolve_dir(roland_dir)
     lib, mem, _ = _open_memory(roland_dir, memory_num)
     old_name = mem.name
     mem.set_name(new_name)
@@ -239,15 +255,17 @@ def name(roland_dir: str, memory_num: int, new_name: str) -> None:
 
 
 @cli.command()
-@click.argument("roland_dir", type=click.Path(exists=True, file_okay=False))
 @click.argument("src", type=int)
 @click.argument("dst", type=int)
+@click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
+              default=None, help="ROLAND/ directory (default: config or auto-detect)")
 @click.option("--force", is_flag=True, help="Overwrite destination without prompting")
-def copy(roland_dir: str, src: int, dst: int, force: bool) -> None:
+def copy(src: int, dst: int, roland_dir: str | None, force: bool) -> None:
     """Copy a memory slot to another slot (RC0 + WAV).
 
-    Example: eastlight copy ROLAND 1 50
+    Example: eastlight copy 1 50
     """
+    roland_dir = _resolve_dir(roland_dir)
     lib = RC505Library(roland_dir)
 
     src_slot = lib.memory_slot(src)
@@ -271,14 +289,16 @@ def copy(roland_dir: str, src: int, dst: int, force: bool) -> None:
 
 
 @cli.command()
-@click.argument("roland_dir", type=click.Path(exists=True, file_okay=False))
 @click.argument("mem_a", type=int)
 @click.argument("mem_b", type=int)
-def swap(roland_dir: str, mem_a: int, mem_b: int) -> None:
+@click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
+              default=None, help="ROLAND/ directory (default: config or auto-detect)")
+def swap(mem_a: int, mem_b: int, roland_dir: str | None) -> None:
     """Swap two memory slots (RC0 + WAV).
 
-    Example: eastlight swap ROLAND 1 50
+    Example: eastlight swap 1 50
     """
+    roland_dir = _resolve_dir(roland_dir)
     lib = RC505Library(roland_dir)
 
     slot_a = lib.memory_slot(mem_a)
@@ -298,15 +318,17 @@ def swap(roland_dir: str, mem_a: int, mem_b: int) -> None:
 
 
 @cli.command()
-@click.argument("roland_dir", type=click.Path(exists=True, file_okay=False))
 @click.argument("mem_a", type=int)
 @click.argument("mem_b", type=int)
+@click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
+              default=None, help="ROLAND/ directory (default: config or auto-detect)")
 @click.option("--section", "-s", help="Compare only this section")
-def diff(roland_dir: str, mem_a: int, mem_b: int, section: str | None) -> None:
+def diff(mem_a: int, mem_b: int, roland_dir: str | None, section: str | None) -> None:
     """Show differences between two memories.
 
-    Example: eastlight diff ROLAND 1 3
+    Example: eastlight diff 1 3
     """
+    roland_dir = _resolve_dir(roland_dir)
     registry = _load_registry()
     lib = RC505Library(roland_dir)
     rc0_a = lib.parse_memory(mem_a)
@@ -373,14 +395,16 @@ def diff(roland_dir: str, mem_a: int, mem_b: int, section: str | None) -> None:
 
 
 @cli.command("wav-info")
-@click.argument("roland_dir", type=click.Path(exists=True, file_okay=False))
 @click.argument("memory_num", type=int)
+@click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
+              default=None, help="ROLAND/ directory (default: config or auto-detect)")
 @click.option("--track", "-t", type=int, default=None, help="Show only this track (1-5)")
-def wav_info_cmd(roland_dir: str, memory_num: int, track: int | None) -> None:
+def wav_info_cmd(memory_num: int, roland_dir: str | None, track: int | None) -> None:
     """Show WAV audio info for a memory's tracks.
 
-    Example: eastlight wav-info ROLAND 1
+    Example: eastlight wav-info 1
     """
+    roland_dir = _resolve_dir(roland_dir)
     lib = RC505Library(roland_dir)
     slot = lib.memory_slot(memory_num)
 
@@ -426,10 +450,11 @@ def wav_info_cmd(roland_dir: str, memory_num: int, track: int | None) -> None:
 
 
 @cli.command("wav-export")
-@click.argument("roland_dir", type=click.Path(exists=True, file_okay=False))
 @click.argument("memory_num", type=int)
 @click.argument("track_num", type=int)
 @click.argument("output", type=click.Path(dir_okay=False))
+@click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
+              default=None, help="ROLAND/ directory (default: config or auto-detect)")
 @click.option(
     "--format",
     "fmt",
@@ -438,15 +463,16 @@ def wav_info_cmd(roland_dir: str, memory_num: int, track: int | None) -> None:
     help="Export format (default: float32 — native lossless)",
 )
 def wav_export_cmd(
-    roland_dir: str, memory_num: int, track_num: int, output: str, fmt: str
+    memory_num: int, track_num: int, output: str, roland_dir: str | None, fmt: str
 ) -> None:
     """Export a track's audio to a WAV file.
 
     Default format is 32-bit float (native, lossless). Use --format pcm24
     for DAW compatibility, or pcm16 for maximum compatibility.
 
-    Example: eastlight wav-export ROLAND 1 1 my_loop.wav
+    Example: eastlight wav-export 1 1 my_loop.wav
     """
+    roland_dir = _resolve_dir(roland_dir)
     lib = RC505Library(roland_dir)
     slot = lib.memory_slot(memory_num)
 
@@ -480,16 +506,17 @@ def wav_export_cmd(
 
 
 @cli.command("wav-import")
-@click.argument("roland_dir", type=click.Path(exists=True, file_okay=False))
 @click.argument("memory_num", type=int)
 @click.argument("track_num", type=int)
 @click.argument("input_file", type=click.Path(exists=True, dir_okay=False))
+@click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
+              default=None, help="ROLAND/ directory (default: config or auto-detect)")
 @click.option("--force", is_flag=True, help="Overwrite existing track audio without prompting")
 def wav_import_cmd(
-    roland_dir: str,
     memory_num: int,
     track_num: int,
     input_file: str,
+    roland_dir: str | None,
     force: bool,
 ) -> None:
     """Import an audio file into a memory track.
@@ -498,8 +525,9 @@ def wav_import_cmd(
     Audio is converted to 32-bit float stereo at 44.1kHz (the device's
     native format). Mono files are duplicated to stereo.
 
-    Example: eastlight wav-import ROLAND 1 1 my_recording.wav
+    Example: eastlight wav-import 1 1 my_recording.wav
     """
+    roland_dir = _resolve_dir(roland_dir)
     lib = RC505Library(roland_dir)
     slot = lib.memory_slot(memory_num)
 
@@ -571,16 +599,17 @@ _FX_SLOTS = ["A", "B", "C", "D"]
 
 
 @cli.command("fx-show")
-@click.argument("roland_dir", type=click.Path(exists=True, file_okay=False))
 @click.argument("memory_num", type=int)
 @click.argument("chain", type=click.Choice(["ifx", "tfx"]))
+@click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
+              default=None, help="ROLAND/ directory (default: config or auto-detect)")
 @click.option("--group", "-g", type=click.Choice(_FX_GROUPS), help="Show only this group (A-D)")
 @click.option("--slot", "-s", help="Show only this subslot (e.g., AA, AB, CD)")
 @click.option("--raw", is_flag=True, help="Show raw tag names instead of resolved names")
 def fx_show(
-    roland_dir: str,
     memory_num: int,
     chain: str,
+    roland_dir: str | None,
     group: str | None,
     slot: str | None,
     raw: bool,
@@ -592,10 +621,11 @@ def fx_show(
     Examples:
 
     \b
-      eastlight fx-show ROLAND 1 ifx
-      eastlight fx-show ROLAND 1 tfx -g A
-      eastlight fx-show ROLAND 1 ifx -s AA
+      eastlight fx-show 1 ifx
+      eastlight fx-show 1 tfx -g A
+      eastlight fx-show 1 ifx -s AA
     """
+    roland_dir = _resolve_dir(roland_dir)
     lib, mem, registry = _open_memory(roland_dir, memory_num)
     rc0 = mem.rc0
 
@@ -664,19 +694,20 @@ def fx_show(
 
 
 @cli.command("fx-set")
-@click.argument("roland_dir", type=click.Path(exists=True, file_okay=False))
 @click.argument("memory_num", type=int)
 @click.argument("chain", type=click.Choice(["ifx", "tfx"]))
 @click.argument("subslot")
 @click.argument("param_name")
 @click.argument("value", type=int)
+@click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
+              default=None, help="ROLAND/ directory (default: config or auto-detect)")
 def fx_set(
-    roland_dir: str,
     memory_num: int,
     chain: str,
     subslot: str,
     param_name: str,
     value: int,
+    roland_dir: str | None,
 ) -> None:
     """Set an FX parameter value.
 
@@ -690,10 +721,11 @@ def fx_set(
     Examples:
 
     \b
-      eastlight fx-set ROLAND 1 ifx AA feedback 30
-      eastlight fx-set ROLAND 1 tfx AA sw 1
-      eastlight fx-set ROLAND 1 ifx AA fx_type 35
+      eastlight fx-set 1 ifx AA feedback 30
+      eastlight fx-set 1 tfx AA sw 1
+      eastlight fx-set 1 ifx AA fx_type 35
     """
+    roland_dir = _resolve_dir(roland_dir)
     lib, mem, registry = _open_memory(roland_dir, memory_num)
     rc0 = mem.rc0
 
@@ -797,7 +829,11 @@ def detect() -> None:
 
     if len(devices) == 1:
         console.print(
-            f"\nTo use: [bold]eastlight list {devices[0]}[/bold]"
+            f"\nTo set as default: [bold]eastlight config --set-dir {devices[0]}[/bold]"
+        )
+    else:
+        console.print(
+            "\nSet one as default: [bold]eastlight config --set-dir <path>[/bold]"
         )
 
 

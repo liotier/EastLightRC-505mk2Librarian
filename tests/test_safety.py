@@ -1,4 +1,4 @@
-"""Tests for backup, config, and device detection."""
+"""Tests for backup, config, device detection, and dir resolution."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from eastlight.core.config import (
     _is_roland_dir,
     detect_device,
     load_config,
+    resolve_roland_dir,
     save_config,
 )
 from eastlight.core.library import RC505Library
@@ -40,15 +41,16 @@ class TestAutoBackup:
         rc0_path.write_text(sample_rc0_content, encoding="utf-8")
         original_content = rc0_path.read_text()
 
-        lib = RC505Library(root, backup=True)
+        backup_dir = tmp_path / "backups"
+        lib = RC505Library(root, backup=True, backup_dir=backup_dir)
         rc0 = lib.parse_memory(1)
         # Modify something so the save is meaningful
         rc0.mem["MASTER"]["A"] = 80
         lib.save_memory(1, rc0)
 
-        # Backup directory should exist
-        backup_dir = root / ".eastlight_backup"
+        # Backup directory should exist (outside ROLAND/)
         assert backup_dir.exists()
+        assert not (root / ".eastlight_backup").exists()
 
         # Should have exactly one timestamped subdirectory
         ts_dirs = list(backup_dir.iterdir())
@@ -69,12 +71,13 @@ class TestAutoBackup:
         wave.mkdir(parents=True)
         (data / "MEMORY001A.RC0").write_text(sample_rc0_content, encoding="utf-8")
 
-        lib = RC505Library(root, backup=False)
+        backup_dir = tmp_path / "backups"
+        lib = RC505Library(root, backup=False, backup_dir=backup_dir)
         rc0 = lib.parse_memory(1)
         lib.save_memory(1, rc0)
 
         # No backup directory should be created
-        assert not (root / ".eastlight_backup").exists()
+        assert not backup_dir.exists()
 
     def test_backup_skipped_for_new_file(
         self, tmp_path: Path, sample_rc0_content: str
@@ -86,7 +89,8 @@ class TestAutoBackup:
         wave.mkdir(parents=True)
         (data / "MEMORY001A.RC0").write_text(sample_rc0_content, encoding="utf-8")
 
-        lib = RC505Library(root, backup=True)
+        backup_dir = tmp_path / "backups"
+        lib = RC505Library(root, backup=True, backup_dir=backup_dir)
         rc0 = lib.parse_memory(1)
         # Save to a new slot (050) — no existing file to backup
         for elem in rc0.elements:
@@ -95,7 +99,22 @@ class TestAutoBackup:
         lib.save_memory(50, rc0)
 
         # Backup dir should not exist (nothing to back up)
-        assert not (root / ".eastlight_backup").exists()
+        assert not backup_dir.exists()
+
+    def test_backup_not_inside_roland(
+        self, tmp_path: Path, sample_rc0_content: str
+    ) -> None:
+        """Backups must never be stored inside the ROLAND/ directory."""
+        root = tmp_path / "ROLAND"
+        data = root / "DATA"
+        wave = root / "WAVE"
+        data.mkdir(parents=True)
+        wave.mkdir(parents=True)
+        (data / "MEMORY001A.RC0").write_text(sample_rc0_content, encoding="utf-8")
+
+        lib = RC505Library(root, backup=True)
+        # The default backup dir should NOT be under root
+        assert not str(lib._backup_dir).startswith(str(root))
 
 
 # --- Config tests ---
@@ -160,6 +179,41 @@ class TestDeviceDetection:
         # Just verify it doesn't crash; result depends on host system
         result = detect_device()
         assert isinstance(result, list)
+
+
+# --- Dir resolution tests ---
+
+
+class TestResolveRolandDir:
+    def test_explicit_path(self, tmp_path: Path, sample_rc0_content: str) -> None:
+        root = tmp_path / "ROLAND"
+        data = root / "DATA"
+        data.mkdir(parents=True)
+        (data / "MEMORY001A.RC0").write_text(sample_rc0_content)
+        result = resolve_roland_dir(str(root))
+        assert result == root
+
+    def test_explicit_path_not_found(self) -> None:
+        with pytest.raises(ValueError, match="not found"):
+            resolve_roland_dir("/nonexistent/path")
+
+    def test_config_fallback(self, tmp_path: Path, sample_rc0_content: str) -> None:
+        root = tmp_path / "ROLAND"
+        data = root / "DATA"
+        data.mkdir(parents=True)
+        (data / "MEMORY001A.RC0").write_text(sample_rc0_content)
+
+        cfg_path = tmp_path / "config.yaml"
+        save_config(Config(roland_dir=str(root)), cfg_path)
+
+        result = resolve_roland_dir(config_path=cfg_path)
+        assert result == root
+
+    def test_no_dir_raises(self, tmp_path: Path) -> None:
+        cfg_path = tmp_path / "config.yaml"
+        save_config(Config(), cfg_path)
+        with pytest.raises(ValueError, match="No ROLAND"):
+            resolve_roland_dir(config_path=cfg_path)
 
 
 # --- CLI config/detect command tests ---

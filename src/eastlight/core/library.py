@@ -6,6 +6,7 @@ within a Roland RC-505 MK2 backup directory structure.
 
 from __future__ import annotations
 
+import hashlib
 import shutil
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -13,6 +14,19 @@ from pathlib import Path
 
 from .parser import RC0File, parse_memory_file, parse_system_file
 from .writer import write_rc0
+
+_BACKUP_BASE = Path.home() / ".config" / "eastlight" / "backups"
+
+
+def backup_dir_for(roland_dir: Path) -> Path:
+    """Compute backup directory for a given ROLAND directory.
+
+    Backups are stored under ~/.config/eastlight/backups/<hash>/
+    where <hash> is derived from the resolved ROLAND directory path.
+    This keeps backups outside the device filesystem.
+    """
+    path_hash = hashlib.sha256(str(roland_dir.resolve()).encode()).hexdigest()[:12]
+    return _BACKUP_BASE / path_hash
 
 
 @dataclass
@@ -47,16 +61,25 @@ class RC505Library:
     Args:
         roland_dir: Path to the ROLAND/ directory.
         backup: If True, automatically create timestamped backups before
-            any write operation. Backups are stored in .eastlight_backup/
-            within the ROLAND/ directory. Default True.
+            any write operation. Backups are stored under
+            ~/.config/eastlight/backups/ (outside the device filesystem).
+            Default True.
+        backup_dir: Override backup directory (for testing). If None,
+            computed from the ROLAND directory path.
     """
 
-    def __init__(self, roland_dir: str | Path, *, backup: bool = True) -> None:
+    def __init__(
+        self,
+        roland_dir: str | Path,
+        *,
+        backup: bool = True,
+        backup_dir: Path | None = None,
+    ) -> None:
         self.root = Path(roland_dir)
         self.data_dir = self.root / "DATA"
         self.wave_dir = self.root / "WAVE"
         self._backup = backup
-        self._backup_dir = self.root / ".eastlight_backup"
+        self._backup_dir = backup_dir or backup_dir_for(self.root)
 
         if not self.data_dir.exists():
             raise FileNotFoundError(f"DATA directory not found: {self.data_dir}")

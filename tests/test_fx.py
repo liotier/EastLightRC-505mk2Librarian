@@ -265,19 +265,19 @@ class TestFXTypeEnum:
 
 class TestFXShowCommand:
     def test_fx_show_ifx(self, runner: CliRunner, fx_roland_dir: Path) -> None:
-        result = runner.invoke(cli, ["fx-show", str(fx_roland_dir), "1", "ifx"])
+        result = runner.invoke(cli, ["fx-show", "1", "ifx", "-d", str(fx_roland_dir)])
         assert result.exit_code == 0
         assert "DELAY" in result.output
         assert "AA" in result.output
 
     def test_fx_show_tfx(self, runner: CliRunner, fx_roland_dir: Path) -> None:
-        result = runner.invoke(cli, ["fx-show", str(fx_roland_dir), "1", "tfx"])
+        result = runner.invoke(cli, ["fx-show", "1", "tfx", "-d", str(fx_roland_dir)])
         assert result.exit_code == 0
         assert "REVERB" in result.output
 
     def test_fx_show_group_filter(self, runner: CliRunner, fx_roland_dir: Path) -> None:
         result = runner.invoke(
-            cli, ["fx-show", str(fx_roland_dir), "1", "ifx", "-g", "A"]
+            cli, ["fx-show", "1", "ifx", "-d", str(fx_roland_dir), "-g", "A"]
         )
         assert result.exit_code == 0
         assert "AA" in result.output
@@ -285,7 +285,7 @@ class TestFXShowCommand:
 
     def test_fx_show_slot_filter(self, runner: CliRunner, fx_roland_dir: Path) -> None:
         result = runner.invoke(
-            cli, ["fx-show", str(fx_roland_dir), "1", "ifx", "-s", "AA"]
+            cli, ["fx-show", "1", "ifx", "-d", str(fx_roland_dir), "-s", "AA"]
         )
         assert result.exit_code == 0
         assert "DELAY" in result.output
@@ -294,20 +294,20 @@ class TestFXShowCommand:
 
     def test_fx_show_raw_mode(self, runner: CliRunner, fx_roland_dir: Path) -> None:
         result = runner.invoke(
-            cli, ["fx-show", str(fx_roland_dir), "1", "ifx", "-s", "AA", "--raw"]
+            cli, ["fx-show", "1", "ifx", "-d", str(fx_roland_dir), "-s", "AA", "--raw"]
         )
         assert result.exit_code == 0
         # Should show raw tag names (A, B, C, etc.)
 
     def test_fx_show_displays_on_off(self, runner: CliRunner, fx_roland_dir: Path) -> None:
         result = runner.invoke(
-            cli, ["fx-show", str(fx_roland_dir), "1", "ifx", "-s", "AA"]
+            cli, ["fx-show", "1", "ifx", "-d", str(fx_roland_dir), "-s", "AA"]
         )
         assert result.exit_code == 0
         assert "ON" in result.output  # AA has sw=1
 
         result = runner.invoke(
-            cli, ["fx-show", str(fx_roland_dir), "1", "ifx", "-s", "AB"]
+            cli, ["fx-show", "1", "ifx", "-d", str(fx_roland_dir), "-s", "AB"]
         )
         assert result.exit_code == 0
         assert "OFF" in result.output  # AB has sw=0
@@ -318,7 +318,7 @@ class TestFXSetCommand:
         self, runner: CliRunner, fx_roland_dir: Path
     ) -> None:
         result = runner.invoke(
-            cli, ["fx-set", str(fx_roland_dir), "1", "ifx", "AA", "feedback", "30"]
+            cli, ["fx-set", "1", "ifx", "AA", "feedback", "30", "-d", str(fx_roland_dir)]
         )
         assert result.exit_code == 0
         assert "Set" in result.output
@@ -333,7 +333,7 @@ class TestFXSetCommand:
         self, runner: CliRunner, fx_roland_dir: Path
     ) -> None:
         result = runner.invoke(
-            cli, ["fx-set", str(fx_roland_dir), "1", "ifx", "AA", "B", "25"]
+            cli, ["fx-set", "1", "ifx", "AA", "B", "25", "-d", str(fx_roland_dir)]
         )
         assert result.exit_code == 0
         assert "Set" in result.output
@@ -345,7 +345,7 @@ class TestFXSetCommand:
         self, runner: CliRunner, fx_roland_dir: Path
     ) -> None:
         result = runner.invoke(
-            cli, ["fx-set", str(fx_roland_dir), "1", "ifx", "AB", "sw", "1"]
+            cli, ["fx-set", "1", "ifx", "AB", "sw", "1", "-d", str(fx_roland_dir)]
         )
         assert result.exit_code == 0
         assert "Set" in result.output
@@ -357,7 +357,7 @@ class TestFXSetCommand:
         self, runner: CliRunner, fx_roland_dir: Path
     ) -> None:
         result = runner.invoke(
-            cli, ["fx-set", str(fx_roland_dir), "1", "ifx", "AA", "fx_type", "48"]
+            cli, ["fx-set", "1", "ifx", "AA", "fx_type", "48", "-d", str(fx_roland_dir)]
         )
         assert result.exit_code == 0
         assert "DELAY" in result.output  # old type name
@@ -370,7 +370,7 @@ class TestFXSetCommand:
         self, runner: CliRunner, fx_roland_dir: Path
     ) -> None:
         result = runner.invoke(
-            cli, ["fx-set", str(fx_roland_dir), "1", "ifx", "ZZ", "feedback", "30"]
+            cli, ["fx-set", "1", "ifx", "ZZ", "feedback", "30", "-d", str(fx_roland_dir)]
         )
         assert result.exit_code != 0
         assert "not found" in result.output
@@ -379,7 +379,7 @@ class TestFXSetCommand:
         self, runner: CliRunner, fx_roland_dir: Path
     ) -> None:
         result = runner.invoke(
-            cli, ["fx-set", str(fx_roland_dir), "1", "ifx", "AA", "nonexistent", "30"]
+            cli, ["fx-set", "1", "ifx", "AA", "nonexistent", "30", "-d", str(fx_roland_dir)]
         )
         assert result.exit_code != 0
         assert "not found" in result.output
@@ -390,7 +390,7 @@ class TestFXShowWithResolvedSchemas:
 
     def test_delay_params_resolved(self, runner: CliRunner, fx_roland_dir: Path) -> None:
         result = runner.invoke(
-            cli, ["fx-show", str(fx_roland_dir), "1", "ifx", "-s", "AA"]
+            cli, ["fx-show", "1", "ifx", "-d", str(fx_roland_dir), "-s", "AA"]
         )
         assert result.exit_code == 0
         # DELAY schema should resolve tags to parameter names
@@ -400,7 +400,7 @@ class TestFXShowWithResolvedSchemas:
 
     def test_reverb_params_resolved(self, runner: CliRunner, fx_roland_dir: Path) -> None:
         result = runner.invoke(
-            cli, ["fx-show", str(fx_roland_dir), "1", "tfx", "-s", "AA"]
+            cli, ["fx-show", "1", "tfx", "-d", str(fx_roland_dir), "-s", "AA"]
         )
         assert result.exit_code == 0
         output_lower = result.output.lower()
