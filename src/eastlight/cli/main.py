@@ -8,6 +8,7 @@ import click
 from rich.console import Console
 from rich.table import Table
 
+from eastlight.core.config import detect_device, load_config, save_config
 from eastlight.core.library import RC505Library
 from eastlight.core.model import Memory
 from eastlight.core.parser import parse_memory_file
@@ -769,6 +770,83 @@ def fx_set(
         f"[green]Set[/green] {chain}.{subslot}.{fx_name}.{display_name}: "
         f"{old_value} → {value}"
     )
+
+
+# --- Device & config commands ---
+
+
+@cli.command()
+def detect() -> None:
+    """Auto-detect connected RC-505 MK2 devices.
+
+    Scans mounted volumes for ROLAND/ directories containing RC0 files.
+    """
+    console.print("[bold]Scanning for RC-505 MK2 devices...[/bold]")
+    devices = detect_device()
+
+    if not devices:
+        console.print("[dim]No devices found.[/dim]")
+        console.print(
+            "\nMake sure your RC-505 MK2 is connected via USB "
+            "and the SD card is mounted."
+        )
+        return
+
+    for i, path in enumerate(devices, 1):
+        console.print(f"  {i}. [green]{path}[/green]")
+
+    if len(devices) == 1:
+        console.print(
+            f"\nTo use: [bold]eastlight list {devices[0]}[/bold]"
+        )
+
+
+@cli.command()
+@click.option("--set-dir", type=click.Path(exists=True, file_okay=False),
+              help="Set default ROLAND/ directory path")
+@click.option("--backup/--no-backup", default=None,
+              help="Enable/disable automatic backup before writes")
+@click.option("--show", is_flag=True, help="Show current configuration")
+def config(set_dir: str | None, backup: bool | None, show: bool) -> None:
+    """View or modify EastLight configuration.
+
+    Configuration is stored in ~/.config/eastlight/config.yaml.
+
+    Examples:
+
+    \b
+      eastlight config --show
+      eastlight config --set-dir /media/user/RC505/ROLAND
+      eastlight config --no-backup
+    """
+    cfg = load_config()
+
+    if set_dir is not None:
+        cfg.roland_dir = set_dir
+        # Add to recent list
+        if set_dir not in cfg.recent:
+            cfg.recent.insert(0, set_dir)
+            cfg.recent = cfg.recent[:10]  # Keep last 10
+        path = save_config(cfg)
+        console.print(f"[green]Saved[/green] default directory: {set_dir}")
+        console.print(f"[dim]Config: {path}[/dim]")
+        return
+
+    if backup is not None:
+        cfg.backup = backup
+        path = save_config(cfg)
+        state = "enabled" if backup else "disabled"
+        console.print(f"[green]Saved[/green] backup: {state}")
+        return
+
+    # Default: show config
+    console.print("[bold]EastLight Configuration[/bold]")
+    console.print(f"  ROLAND dir: {cfg.roland_dir or '[dim](not set)[/dim]'}")
+    console.print(f"  Backup:     {'[green]enabled[/green]' if cfg.backup else '[red]disabled[/red]'}")
+    if cfg.recent:
+        console.print("  Recent:")
+        for r in cfg.recent:
+            console.print(f"    {r}")
 
 
 if __name__ == "__main__":

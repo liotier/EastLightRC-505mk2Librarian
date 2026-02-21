@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import shutil
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .parser import RC0File, parse_memory_file, parse_system_file
@@ -41,15 +42,39 @@ class MemorySlot:
 
 
 class RC505Library:
-    """Manager for a ROLAND/ backup directory."""
+    """Manager for a ROLAND/ backup directory.
 
-    def __init__(self, roland_dir: str | Path) -> None:
+    Args:
+        roland_dir: Path to the ROLAND/ directory.
+        backup: If True, automatically create timestamped backups before
+            any write operation. Backups are stored in .eastlight_backup/
+            within the ROLAND/ directory. Default True.
+    """
+
+    def __init__(self, roland_dir: str | Path, *, backup: bool = True) -> None:
         self.root = Path(roland_dir)
         self.data_dir = self.root / "DATA"
         self.wave_dir = self.root / "WAVE"
+        self._backup = backup
+        self._backup_dir = self.root / ".eastlight_backup"
 
         if not self.data_dir.exists():
             raise FileNotFoundError(f"DATA directory not found: {self.data_dir}")
+
+    def _backup_file(self, path: Path) -> Path | None:
+        """Create a timestamped backup of a file before overwriting it.
+
+        Returns the backup path, or None if backup is disabled or file doesn't exist.
+        """
+        if not self._backup or not path.exists():
+            return None
+
+        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        rel = path.relative_to(self.root)
+        backup_path = self._backup_dir / ts / rel
+        backup_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(path, backup_path)
+        return backup_path
 
     def memory_slot(self, number: int) -> MemorySlot:
         """Get a memory slot by number (1-99)."""
@@ -86,10 +111,14 @@ class RC505Library:
         return parse_memory_file(path)
 
     def save_memory(self, number: int, rc0: RC0File, variant: str = "A") -> Path:
-        """Write a memory RC0 file back to disk."""
+        """Write a memory RC0 file back to disk.
+
+        Automatically backs up the existing file before overwriting.
+        """
         if variant not in ("A", "B"):
             raise ValueError(f"Variant must be 'A' or 'B', got '{variant}'")
         path = self.data_dir / f"MEMORY{number:03d}{variant}.RC0"
+        self._backup_file(path)
         write_rc0(rc0, path)
         return path
 
@@ -127,7 +156,9 @@ class RC505Library:
             if src_wav.exists():
                 dst_wav_dir = self.wave_dir / f"{dst:03d}_{track}"
                 dst_wav_dir.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src_wav, dst_wav_dir / f"{dst:03d}_{track}.WAV")
+                dst_wav = dst_wav_dir / f"{dst:03d}_{track}.WAV"
+                self._backup_file(dst_wav)
+                shutil.copy2(src_wav, dst_wav)
 
     def swap_memories(self, a: int, b: int) -> None:
         """Swap two memory slots (RC0 data + WAV audio)."""
@@ -160,6 +191,12 @@ class RC505Library:
                 wav_b = self.wave_dir / f"{b:03d}_{track}" / f"{b:03d}_{track}.WAV"
                 a_exists = wav_a.exists()
                 b_exists = wav_b.exists()
+
+                # Backup before swap
+                if a_exists:
+                    self._backup_file(wav_a)
+                if b_exists:
+                    self._backup_file(wav_b)
 
                 if not a_exists and not b_exists:
                     continue
