@@ -1,0 +1,12 @@
+section: RADIO
+fields:
+  A:
+    name: frequency
+    type: int
+    default: 4
+    display: "Frequency"
+  B:
+    name: d_level
+    type: int
+    default: 50
+    display: "D.Level"

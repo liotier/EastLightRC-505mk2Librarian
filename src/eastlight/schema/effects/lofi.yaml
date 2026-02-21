@@ -1,0 +1,17 @@
+section: LOFI
+fields:
+  A:
+    name: bit_depth
+    type: int
+    default: 24
+    display: "Bit Depth"
+  B:
+    name: sample_rate
+    type: int
+    default: 3
+    display: "Sample Rate"
+  D:
+    name: d_level
+    type: int
+    default: 50
+    display: "D.Level"

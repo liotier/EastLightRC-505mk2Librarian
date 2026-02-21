@@ -1,0 +1,7 @@
+section: VINYL_FLICK
+fields:
+  A:
+    name: flick
+    type: int
+    default: 50
+    display: "Flick"

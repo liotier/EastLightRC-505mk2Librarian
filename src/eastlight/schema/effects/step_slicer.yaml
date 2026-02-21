@@ -1,0 +1,187 @@
+section: STEP_SLICER
+fields:
+  A:
+    name: rate
+    type: int
+    default: 6
+    display: "Rate"
+  B:
+    name: step_count
+    type: int
+    default: 15
+    display: "Step Count"
+  C:
+    name: step_1
+    type: int
+    default: 50
+    display: "Step 1"
+  D:
+    name: step_2
+    type: int
+    default: 50
+    display: "Step 2"
+  E:
+    name: step_3
+    type: int
+    default: 50
+    display: "Step 3"
+  F:
+    name: step_4
+    type: int
+    default: 50
+    display: "Step 4"
+  G:
+    name: step_5
+    type: int
+    default: 50
+    display: "Step 5"
+  H:
+    name: step_6
+    type: int
+    default: 50
+    display: "Step 6"
+  I:
+    name: step_7
+    type: int
+    default: 50
+    display: "Step 7"
+  J:
+    name: step_8
+    type: int
+    default: 50
+    display: "Step 8"
+  K:
+    name: step_9
+    type: int
+    default: 50
+    display: "Step 9"
+  L:
+    name: step_10
+    type: int
+    default: 50
+    display: "Step 10"
+  M:
+    name: step_11
+    type: int
+    default: 50
+    display: "Step 11"
+  N:
+    name: step_12
+    type: int
+    default: 50
+    display: "Step 12"
+  O:
+    name: step_13
+    type: int
+    default: 50
+    display: "Step 13"
+  P:
+    name: step_14
+    type: int
+    default: 50
+    display: "Step 14"
+  Q:
+    name: step_15
+    type: int
+    default: 50
+    display: "Step 15"
+  R:
+    name: step_16
+    type: int
+    default: 50
+    display: "Step 16"
+  S:
+    name: level_1
+    type: int
+    default: 100
+    display: "Level 1"
+  T:
+    name: level_2
+    type: int
+    default: 100
+    display: "Level 2"
+  U:
+    name: level_3
+    type: int
+    default: 100
+    display: "Level 3"
+  V:
+    name: level_4
+    type: int
+    default: 100
+    display: "Level 4"
+  W:
+    name: level_5
+    type: int
+    default: 100
+    display: "Level 5"
+  X:
+    name: level_6
+    type: int
+    default: 100
+    display: "Level 6"
+  Y:
+    name: level_7
+    type: int
+    default: 100
+    display: "Level 7"
+  Z:
+    name: level_8
+    type: int
+    default: 100
+    display: "Level 8"
+  0:
+    name: level_9
+    type: int
+    default: 100
+    display: "Level 9"
+  1:
+    name: level_10
+    type: int
+    default: 100
+    display: "Level 10"
+  2:
+    name: level_11
+    type: int
+    default: 100
+    display: "Level 11"
+  3:
+    name: level_12
+    type: int
+    default: 100
+    display: "Level 12"
+  4:
+    name: level_13
+    type: int
+    default: 100
+    display: "Level 13"
+  5:
+    name: level_14
+    type: int
+    default: 100
+    display: "Level 14"
+  6:
+    name: level_15
+    type: int
+    default: 100
+    display: "Level 15"
+  7:
+    name: level_16
+    type: int
+    default: 100
+    display: "Level 16"
+  8:
+    name: e_level
+    type: int
+    default: 100
+    display: "E.Level"
+  9:
+    name: d_level
+    type: int
+    default: 0
+    display: "D.Level"
+  #:
+    name: step_rate
+    type: int
+    default: 6
+    display: "Step Rate"

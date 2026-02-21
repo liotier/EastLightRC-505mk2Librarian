@@ -1,0 +1,32 @@
+section: SUSTAINER
+fields:
+  A:
+    name: sustain
+    type: int
+    default: 50
+    display: "Sustain"
+  B:
+    name: attack
+    type: int
+    default: 50
+    display: "Attack"
+  C:
+    name: e_level
+    type: int
+    default: 50
+    display: "E.Level"
+  D:
+    name: mix
+    type: int
+    default: 20
+    display: "Mix"
+  E:
+    name: tone
+    type: int
+    default: 20
+    display: "Tone"
+  F:
+    name: d_level
+    type: int
+    default: 50
+    display: "D.Level"

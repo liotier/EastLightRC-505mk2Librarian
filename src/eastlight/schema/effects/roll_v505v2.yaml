@@ -1,0 +1,22 @@
+section: ROLL_V505V2
+fields:
+  A:
+    name: time
+    type: int
+    default: 8
+    display: "Time"
+  B:
+    name: feedback
+    type: int
+    default: 50
+    display: "Feedback"
+  C:
+    name: low_cut
+    type: int
+    default: 0
+    display: "Low Cut"
+  D:
+    name: d_level
+    type: int
+    default: 50
+    display: "D.Level"

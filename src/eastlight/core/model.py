@@ -215,6 +215,15 @@ class Memory:
             chars.append(chr(code))
         return "".join(chars).rstrip()
 
+    def set_name(self, new_name: str) -> None:
+        """Set the memory display name (max 12 ASCII chars, space-padded)."""
+        name_section = self.section("NAME")
+        if name_section is None:
+            raise ValueError("No NAME section in this memory")
+        padded = new_name[:12].ljust(12)
+        for i, tag in enumerate("ABCDEFGHIJKL"):
+            name_section.set_by_tag(tag, ord(padded[i]))
+
     def section(self, name: str) -> ResolvedSection | None:
         """Get a resolved section by name."""
         return self._resolved.get(name)

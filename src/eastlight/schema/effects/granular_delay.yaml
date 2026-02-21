@@ -1,0 +1,17 @@
+section: GRANULAR_DELAY
+fields:
+  A:
+    name: time
+    type: int
+    default: 50
+    display: "Time"
+  B:
+    name: feedback
+    type: int
+    default: 70
+    display: "Feedback"
+  C:
+    name: d_level
+    type: int
+    default: 50
+    display: "D.Level"

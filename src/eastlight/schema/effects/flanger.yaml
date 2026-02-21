@@ -1,0 +1,42 @@
+section: FLANGER
+fields:
+  A:
+    name: rate
+    type: int
+    default: 2
+    display: "Rate"
+  B:
+    name: depth
+    type: int
+    default: 50
+    display: "Depth"
+  C:
+    name: resonance
+    type: int
+    default: 70
+    display: "Resonance"
+  D:
+    name: manual
+    type: int
+    default: 50
+    display: "Manual"
+  E:
+    name: low_cut
+    type: int
+    default: 0
+    display: "Low Cut"
+  F:
+    name: feedback
+    type: int
+    default: 100
+    display: "Feedback"
+  G:
+    name: d_level
+    type: int
+    default: 100
+    display: "D.Level"
+  H:
+    name: step_rate
+    type: int
+    default: 0
+    display: "Step Rate"

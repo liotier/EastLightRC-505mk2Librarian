@@ -1,0 +1,37 @@
+section: HARMONIST_AUTO
+fields:
+  A:
+    name: key
+    type: int
+    default: 4
+    display: "Key"
+  B:
+    name: harmony
+    type: int
+    default: 50
+    display: "Harmony"
+  C:
+    name: e_level
+    type: int
+    default: 50
+    display: "E.Level"
+  D:
+    name: d_level
+    type: int
+    default: 1
+    display: "D.Level"
+  E:
+    name: level
+    type: int
+    default: 0
+    display: "Level"
+  F:
+    name: pre_delay
+    type: int
+    default: 100
+    display: "Pre Delay"
+  G:
+    name: low_cut
+    type: int
+    default: 80
+    display: "Low Cut"

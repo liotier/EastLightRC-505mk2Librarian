@@ -1,0 +1,12 @@
+section: BEAT_SHIFT
+fields:
+  A:
+    name: type
+    type: int
+    default: 0
+    display: "Type"
+  B:
+    name: shift
+    type: int
+    default: 4
+    display: "Shift"

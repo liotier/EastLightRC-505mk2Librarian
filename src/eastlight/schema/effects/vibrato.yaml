@@ -1,0 +1,27 @@
+section: VIBRATO
+fields:
+  A:
+    name: wave
+    type: int
+    default: 64
+    display: "Wave"
+  B:
+    name: depth
+    type: int
+    default: 50
+    display: "Depth"
+  C:
+    name: e_level
+    type: int
+    default: 50
+    display: "E.Level"
+  D:
+    name: trigger
+    type: int
+    default: 0
+    display: "Trigger"
+  E:
+    name: d_level
+    type: int
+    default: 100
+    display: "D.Level"

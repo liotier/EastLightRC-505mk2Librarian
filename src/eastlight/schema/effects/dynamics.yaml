@@ -1,0 +1,12 @@
+section: DYNAMICS
+fields:
+  A:
+    name: type
+    type: int
+    default: 0
+    display: "Type"
+  B:
+    name: d_level
+    type: int
+    default: 20
+    display: "D.Level"

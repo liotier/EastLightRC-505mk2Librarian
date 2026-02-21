@@ -1,0 +1,37 @@
+section: PATTERN_SLICER
+fields:
+  A:
+    name: rate
+    type: int
+    default: 6
+    display: "Rate"
+  B:
+    name: pattern
+    type: int
+    default: 49
+    display: "Pattern"
+  C:
+    name: attack
+    type: int
+    default: 35
+    display: "Attack"
+  D:
+    name: d_level
+    type: int
+    default: 0
+    display: "D.Level"
+  E:
+    name: e_level
+    type: int
+    default: 100
+    display: "E.Level"
+  F:
+    name: timing
+    type: int
+    default: 0
+    display: "Timing"
+  G:
+    name: step_rate
+    type: int
+    default: 2
+    display: "Step Rate"

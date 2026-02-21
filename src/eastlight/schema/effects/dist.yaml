@@ -1,0 +1,27 @@
+section: DIST
+fields:
+  A:
+    name: type
+    type: int
+    default: 1
+    display: "Type"
+  B:
+    name: drive
+    type: int
+    default: 50
+    display: "Drive"
+  C:
+    name: tone
+    type: int
+    default: 50
+    display: "Tone"
+  D:
+    name: bottom
+    type: int
+    default: 0
+    display: "Bottom"
+  E:
+    name: d_level
+    type: int
+    default: 50
+    display: "D.Level"

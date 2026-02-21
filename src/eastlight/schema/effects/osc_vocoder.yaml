@@ -1,0 +1,37 @@
+section: OSC_VOCODER
+fields:
+  A:
+    name: wave
+    type: int
+    default: 0
+    display: "Wave"
+  B:
+    name: pitch
+    type: int
+    default: 50
+    display: "Pitch"
+  C:
+    name: sens
+    type: int
+    default: 50
+    display: "Sens"
+  D:
+    name: attack
+    type: int
+    default: 2
+    display: "Attack"
+  E:
+    name: balance
+    type: int
+    default: 50
+    display: "Balance"
+  F:
+    name: e_level
+    type: int
+    default: 50
+    display: "E.Level"
+  G:
+    name: d_level
+    type: int
+    default: 50
+    display: "D.Level"
