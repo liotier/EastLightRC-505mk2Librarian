@@ -221,12 +221,14 @@ def parse(rc0_file: str) -> None:
 @click.argument("value", type=int)
 @click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
               default=None, help="ROLAND/ directory (default: config or auto-detect)")
+@click.option("--dry-run", "-n", is_flag=True, help="Show what would change without writing")
 def set_cmd(
     memory_num: int,
     section_name: str,
     param_name: str,
     value: int,
     roland_dir: str | None,
+    dry_run: bool,
 ) -> None:
     """Set a parameter value in a memory.
 
@@ -249,19 +251,27 @@ def set_cmd(
                 f"Parameter '{param_name}' not found in {section_name}."
             )
         old_value = resolved.get_by_tag(param_name)
-        _validate_warn(resolved.schema, param_name, value)
-        resolved.set_by_tag(param_name, value)
         tag = param_name
+        _validate_warn(resolved.schema, param_name, value)
+        if not dry_run:
+            resolved.set_by_tag(param_name, value)
     else:
         tag = resolved.schema.name_to_tag(param_name) if resolved.schema else param_name
         _validate_warn(resolved.schema, tag, value)
-        resolved.set_by_name(param_name, value)
+        if not dry_run:
+            resolved.set_by_name(param_name, value)
 
-    lib.save_memory(memory_num, mem.rc0)
-    console.print(
-        f"[green]Set[/green] {section_name}.{param_name} "
-        f"({tag}): {old_value} → {value}"
-    )
+    if dry_run:
+        console.print(
+            f"[dim](dry-run)[/dim] {section_name}.{param_name} "
+            f"({tag}): {old_value} → {value}"
+        )
+    else:
+        lib.save_memory(memory_num, mem.rc0)
+        console.print(
+            f"[green]Set[/green] {section_name}.{param_name} "
+            f"({tag}): {old_value} → {value}"
+        )
 
 
 @cli.command()
@@ -353,7 +363,8 @@ def swap(mem_a: int, mem_b: int, roland_dir: str | None) -> None:
 @click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
               default=None, help="ROLAND/ directory (default: config or auto-detect)")
 @click.option("--force", is_flag=True, help="Skip confirmation prompt")
-def clear(memory_num: int, roland_dir: str | None, force: bool) -> None:
+@click.option("--dry-run", "-n", is_flag=True, help="Show what would be deleted without writing")
+def clear(memory_num: int, roland_dir: str | None, force: bool, dry_run: bool) -> None:
     """Clear a memory slot (remove RC0 files and WAV audio).
 
     Backs up the data before deleting. The device will show the slot as empty.
@@ -368,6 +379,19 @@ def clear(memory_num: int, roland_dir: str | None, force: bool) -> None:
         raise click.ClickException(f"Memory {memory_num:03d} does not exist.")
 
     name = lib.memory_name(memory_num) or "(unnamed)"
+
+    if dry_run:
+        console.print(f"[dim](dry-run)[/dim] Would clear memory {memory_num:03d} ('{name}'):")
+        for v in ("A", "B"):
+            p = lib.data_dir / f"MEMORY{memory_num:03d}{v}.RC0"
+            if p.exists():
+                console.print(f"  delete {p.name}")
+        for t in range(1, 6):
+            w = lib.wave_dir / f"{memory_num:03d}_{t}" / f"{memory_num:03d}_{t}.WAV"
+            if w.exists():
+                console.print(f"  delete {w.parent.name}/{w.name}")
+        return
+
     if not force:
         if not click.confirm(
             f"Clear memory {memory_num:03d} ('{name}')? This removes RC0 and WAV data."
@@ -764,6 +788,7 @@ def fx_show(
 @click.argument("value", type=int)
 @click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
               default=None, help="ROLAND/ directory (default: config or auto-detect)")
+@click.option("--dry-run", "-n", is_flag=True, help="Show what would change without writing")
 def fx_set(
     memory_num: int,
     chain: str,
@@ -771,6 +796,7 @@ def fx_set(
     param_name: str,
     value: int,
     roland_dir: str | None,
+    dry_run: bool,
 ) -> None:
     """Set an FX parameter value.
 
@@ -814,17 +840,23 @@ def fx_set(
         if header_tag is not None:
             _validate_warn(header_schema, header_tag, value)
             old_value = header_section.get(header_tag)
-            header_section[header_tag] = value
-            lib.save_memory(memory_num, rc0)
             display = param_name
             if param_name == "fx_type":
                 old_name = fx_type_map.get(old_value, str(old_value))
                 new_name = fx_type_map.get(value, str(value))
                 display = f"fx_type ({old_name} → {new_name})"
-            console.print(
-                f"[green]Set[/green] {chain}.{subslot}.{display}: "
-                f"{old_value} → {value}"
-            )
+            if dry_run:
+                console.print(
+                    f"[dim](dry-run)[/dim] {chain}.{subslot}.{display}: "
+                    f"{old_value} → {value}"
+                )
+            else:
+                header_section[header_tag] = value
+                lib.save_memory(memory_num, rc0)
+                console.print(
+                    f"[green]Set[/green] {chain}.{subslot}.{display}: "
+                    f"{old_value} → {value}"
+                )
             return
 
     # Otherwise, set a parameter on the active effect
@@ -857,17 +889,22 @@ def fx_set(
     _validate_warn(effect_schema, tag, value)
 
     old_value = effect_section.get(tag)
-    effect_section[tag] = value
-    lib.save_memory(memory_num, rc0)
-
     display_name = param_name
     if effect_schema and tag != param_name:
         display_name = f"{param_name} ({tag})"
 
-    console.print(
-        f"[green]Set[/green] {chain}.{subslot}.{fx_name}.{display_name}: "
-        f"{old_value} → {value}"
-    )
+    if dry_run:
+        console.print(
+            f"[dim](dry-run)[/dim] {chain}.{subslot}.{fx_name}.{display_name}: "
+            f"{old_value} → {value}"
+        )
+    else:
+        effect_section[tag] = value
+        lib.save_memory(memory_num, rc0)
+        console.print(
+            f"[green]Set[/green] {chain}.{subslot}.{fx_name}.{display_name}: "
+            f"{old_value} → {value}"
+        )
 
 
 # --- System commands ---
@@ -973,12 +1010,14 @@ def sys_show(
               default=None, help="ROLAND/ directory (default: config or auto-detect)")
 @click.option("--variant", type=click.Choice(["1", "2"]), default="1",
               help="System file variant (default: 1)")
+@click.option("--dry-run", "-n", is_flag=True, help="Show what would change without writing")
 def sys_set(
     section_name: str,
     param_name: str,
     value: int,
     roland_dir: str | None,
     variant: str,
+    dry_run: bool,
 ) -> None:
     """Set a system parameter value.
 
@@ -1029,17 +1068,22 @@ def sys_set(
     _validate_warn(schema, tag, value)
 
     old_value = sec.get(tag)
-    sec[tag] = value
-    lib.save_system(rc0, var_int)
-
     display_name = param_name
     if schema and tag != param_name:
         display_name = f"{param_name} ({tag})"
 
-    console.print(
-        f"[green]Set[/green] SYSTEM{variant}.{section_name}.{display_name}: "
-        f"{old_value} → {value}"
-    )
+    if dry_run:
+        console.print(
+            f"[dim](dry-run)[/dim] SYSTEM{variant}.{section_name}.{display_name}: "
+            f"{old_value} → {value}"
+        )
+    else:
+        sec[tag] = value
+        lib.save_system(rc0, var_int)
+        console.print(
+            f"[green]Set[/green] SYSTEM{variant}.{section_name}.{display_name}: "
+            f"{old_value} → {value}"
+        )
 
 
 # --- Device & config commands ---
@@ -1121,6 +1165,186 @@ def config(set_dir: str | None, backup: bool | None, show: bool) -> None:
         console.print("  Recent:")
         for r in cfg.recent:
             console.print(f"    {r}")
+
+
+# --- Controller mapping commands ---
+
+
+@cli.command("ctl-show")
+@click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
+              default=None, help="ROLAND/ directory (default: config or auto-detect)")
+@click.option("--variant", type=click.Choice(["1", "2"]), default="1",
+              help="System file variant (default: 1)")
+@click.option("--type", "ctl_type", type=click.Choice(["ictl", "ectl", "all"]),
+              default="all", help="Show only internal (ictl) or external (ectl) controllers")
+@click.option("--raw", is_flag=True, help="Show raw tag names")
+def ctl_show(
+    roland_dir: str | None,
+    variant: str,
+    ctl_type: str,
+    raw: bool,
+) -> None:
+    """Show MIDI controller assignments.
+
+    Internal controllers (ICTL) are the panel buttons and pedal inputs.
+    External controllers (ECTL) are MIDI CC inputs (CTL1-4, EXP1-2).
+
+    Examples:
+
+    \b
+      eastlight ctl-show
+      eastlight ctl-show --type ictl
+      eastlight ctl-show --type ectl
+    """
+    roland_dir = _resolve_dir(roland_dir)
+    lib = RC505Library(roland_dir)
+    registry = _load_registry()
+    rc0 = lib.parse_system(int(variant))
+
+    sys_elem = rc0.sys
+    if sys_elem is None:
+        raise click.ClickException("No <sys> element in system file.")
+
+    show_ictl = ctl_type in ("ictl", "all")
+    show_ectl = ctl_type in ("ectl", "all")
+
+    if show_ictl:
+        console.print(f"[bold]Internal Controllers[/bold] (SYSTEM{variant}.RC0)")
+        console.print()
+        _show_ctl_sections(sys_elem, registry, "ICTL", raw)
+
+    if show_ectl:
+        console.print(f"[bold]External Controllers[/bold] (SYSTEM{variant}.RC0)")
+        console.print()
+        _show_ctl_sections(sys_elem, registry, "ECTL", raw)
+
+
+def _show_ctl_sections(sys_elem, registry, prefix: str, raw: bool) -> None:
+    """Display controller sections matching a prefix."""
+    table = Table(show_header=True)
+    table.add_column("Section", style="cyan", min_width=24)
+    table.add_column("Tag", style="dim", width=4)
+    table.add_column("Parameter", min_width=16)
+    table.add_column("Value", justify="right")
+    table.add_column("Display", style="green")
+
+    found = False
+    for sec_name in sys_elem.section_names:
+        if not sec_name.startswith(prefix):
+            continue
+
+        sec = sys_elem.sections.get(sec_name)
+        if sec is None or not sec.fields:
+            continue
+
+        schema = registry.get(sec_name)
+        found = True
+
+        for tag, value in sec.fields.items():
+            if raw or schema is None:
+                param_name = tag
+                display_val = str(value)
+            else:
+                fd = schema.fields.get(tag)
+                if fd:
+                    param_name = fd.display or fd.name
+                    if fd.choices and value in fd.choices:
+                        display_val = fd.choices[value]
+                    else:
+                        display_val = str(value)
+                else:
+                    param_name = tag
+                    display_val = str(value)
+
+            table.add_row(sec_name, tag, param_name, str(value), display_val)
+
+    if found:
+        console.print(table)
+        console.print()
+    else:
+        console.print(f"[dim]No {prefix} sections found.[/dim]")
+
+
+@cli.command("ctl-set")
+@click.argument("section_name")
+@click.argument("param_name")
+@click.argument("value", type=int)
+@click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
+              default=None, help="ROLAND/ directory (default: config or auto-detect)")
+@click.option("--variant", type=click.Choice(["1", "2"]), default="1",
+              help="System file variant (default: 1)")
+@click.option("--dry-run", "-n", is_flag=True, help="Show what would change without writing")
+def ctl_set(
+    section_name: str,
+    param_name: str,
+    value: int,
+    roland_dir: str | None,
+    variant: str,
+    dry_run: bool,
+) -> None:
+    """Set a MIDI controller assignment.
+
+    SECTION_NAME is the controller section (e.g., ICTL1_TRACK1_FX, ECTL_CTL1).
+    PARAM_NAME is a schema name (e.g., ctl_func) or raw tag (A, B, C, D).
+
+    Examples:
+
+    \b
+      eastlight ctl-set ICTL1_TRACK1_FX ctl_func 42
+      eastlight ctl-set ECTL_CTL1 ctl_func 10
+      eastlight ctl-set ECTL_EXP1 ctl_range 64
+      eastlight ctl-set ICTL1_PEDAL1 ctl_mode 0
+    """
+    roland_dir = _resolve_dir(roland_dir)
+    lib = RC505Library(roland_dir)
+    registry = _load_registry()
+    var_int = int(variant)
+    rc0 = lib.parse_system(var_int)
+
+    sys_elem = rc0.sys
+    if sys_elem is None:
+        raise click.ClickException("No <sys> element in system file.")
+
+    section_name = section_name.upper()
+    sec = sys_elem.sections.get(section_name)
+    if sec is None:
+        raise click.ClickException(
+            f"Section '{section_name}' not found. "
+            f"Use 'eastlight ctl-show' to see available controller sections."
+        )
+
+    schema = registry.get(section_name)
+
+    tag = None
+    if schema:
+        tag = schema.name_to_tag(param_name)
+    if tag is None:
+        if param_name in sec.fields:
+            tag = param_name
+        else:
+            raise click.ClickException(
+                f"Parameter '{param_name}' not found in {section_name}."
+            )
+
+    _validate_warn(schema, tag, value)
+
+    old_value = sec.get(tag)
+    display_name = param_name
+    if schema and tag != param_name:
+        display_name = f"{param_name} ({tag})"
+
+    if dry_run:
+        console.print(
+            f"[dim](dry-run)[/dim] {section_name}.{display_name}: "
+            f"{old_value} → {value}"
+        )
+    else:
+        sec[tag] = value
+        lib.save_system(rc0, var_int)
+        console.print(
+            f"[green]Set[/green] {section_name}.{display_name}: "
+            f"{old_value} → {value}"
+        )
 
 
 # --- Backup management commands ---
@@ -1296,11 +1520,13 @@ def template_export(
               default=None, help="ROLAND/ directory (default: config or auto-detect)")
 @click.option("--section", "-s", multiple=True,
               help="Apply only these sections from the template (can repeat)")
+@click.option("--dry-run", "-n", is_flag=True, help="Show what would change without writing")
 def template_apply(
     template_file: str,
     memory_nums: str,
     roland_dir: str | None,
     section: tuple[str, ...],
+    dry_run: bool,
 ) -> None:
     """Apply a YAML template to one or more memories.
 
@@ -1349,11 +1575,13 @@ def template_apply(
                 if tag in resolved.raw.fields:
                     resolved.raw[tag] = value
 
-        lib.save_memory(num, rc0)
+        if not dry_run:
+            lib.save_memory(num, rc0)
         applied += 1
 
+    label = "[dim](dry-run)[/dim]" if dry_run else "[green]Applied[/green]"
     console.print(
-        f"[green]Applied[/green] template ({len(sections_data)} section(s)) "
+        f"{label} template ({len(sections_data)} section(s)) "
         f"to {applied} memory slot(s)"
     )
 
@@ -1365,12 +1593,14 @@ def template_apply(
 @click.argument("value", type=int)
 @click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
               default=None, help="ROLAND/ directory (default: config or auto-detect)")
+@click.option("--dry-run", "-n", is_flag=True, help="Show what would change without writing")
 def bulk_set(
     memory_nums: str,
     section_name: str,
     param_name: str,
     value: int,
     roland_dir: str | None,
+    dry_run: bool,
 ) -> None:
     """Set a parameter across multiple memories at once.
 
@@ -1388,14 +1618,13 @@ def bulk_set(
 
     targets = _parse_memory_range(memory_nums)
 
-    # Validate parameter exists using first available memory
     schema = registry.get(section_name)
 
     tag = None
     if schema:
         tag = schema.name_to_tag(param_name)
     if tag is None:
-        tag = param_name  # treat as raw tag
+        tag = param_name
 
     _validate_warn(schema, tag, value)
 
@@ -1413,12 +1642,19 @@ def bulk_set(
 
         if tag in resolved.raw.fields:
             old = resolved.raw.get(tag)
-            resolved.raw[tag] = value
-            lib.save_memory(num, rc0)
+            if dry_run:
+                console.print(
+                    f"  [dim](dry-run)[/dim] {num:03d}.{section_name}.{param_name}: "
+                    f"{old} → {value}"
+                )
+            else:
+                resolved.raw[tag] = value
+                lib.save_memory(num, rc0)
             updated += 1
 
+    label = "[dim](dry-run)[/dim]" if dry_run else "[green]Set[/green]"
     console.print(
-        f"[green]Set[/green] {section_name}.{param_name} = {value} "
+        f"{label} {section_name}.{param_name} = {value} "
         f"across {updated} memory slot(s)"
     )
 

@@ -6,16 +6,19 @@ build-backend = "setuptools.build_meta"
 name = "eastlight"
 version = "0.1.0"
 description = "Open-source editor/librarian for the Roland RC-505 MK2 loop station"
-readme = "rc505-mk2-feasibility.md"
+readme = "README.md"
 license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
 authors = [
     {name = "EastLight contributors"},
 ]
-keywords = ["roland", "rc505", "loop-station", "midi", "audio", "editor"]
+keywords = ["roland", "rc505", "loop-station", "midi", "audio", "editor", "librarian"]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
     "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -43,8 +46,9 @@ dev = [
 eastlight = "eastlight.cli.main:cli"
 
 [project.urls]
-Homepage = "https://github.com/liotier/EastLight505"
-Repository = "https://github.com/liotier/EastLight505"
+Homepage = "https://github.com/liotier/EastLightRC-505mk2Librarian"
+Repository = "https://github.com/liotier/EastLightRC-505mk2Librarian"
+Issues = "https://github.com/liotier/EastLightRC-505mk2Librarian/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
