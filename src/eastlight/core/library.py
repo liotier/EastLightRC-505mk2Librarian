@@ -252,6 +252,101 @@ class RC505Library:
         path = self.data_dir / f"SYSTEM{variant}.RC0"
         return parse_system_file(path)
 
+    def save_system(self, rc0: RC0File, variant: int = 1) -> Path:
+        """Write a system RC0 file back to disk.
+
+        Automatically backs up the existing file before overwriting.
+        """
+        if variant not in (1, 2):
+            raise ValueError(f"System variant must be 1 or 2, got {variant}")
+        path = self.data_dir / f"SYSTEM{variant}.RC0"
+        self._backup_file(path)
+        write_rc0(rc0, path)
+        return path
+
+    def clear_memory(self, number: int) -> None:
+        """Clear a memory slot: back up then remove RC0 files and WAV audio.
+
+        After clearing, the device will show the slot as empty.
+        """
+        if not 1 <= number <= 99:
+            raise ValueError(f"Memory number must be 1-99, got {number}")
+
+        prefix = f"MEMORY{number:03d}"
+
+        # Backup and remove RC0 files
+        for variant in ("A", "B"):
+            path = self.data_dir / f"{prefix}{variant}.RC0"
+            if path.exists():
+                self._backup_file(path)
+                path.unlink()
+
+        # Backup and remove WAV files/directories
+        for track in range(1, 6):
+            wav_dir = self.wave_dir / f"{number:03d}_{track}"
+            wav_file = wav_dir / f"{number:03d}_{track}.WAV"
+            if wav_file.exists():
+                self._backup_file(wav_file)
+                wav_file.unlink()
+            # Remove empty track dir
+            if wav_dir.exists() and not any(wav_dir.iterdir()):
+                wav_dir.rmdir()
+
+    def list_backups(self) -> list[tuple[str, list[Path]]]:
+        """List all backup snapshots as (timestamp, [relative_paths]).
+
+        Returns a list sorted newest-first.
+        """
+        if not self._backup_dir.exists():
+            return []
+
+        result = []
+        for ts_dir in sorted(self._backup_dir.iterdir(), reverse=True):
+            if not ts_dir.is_dir():
+                continue
+            files = sorted(
+                p.relative_to(ts_dir) for p in ts_dir.rglob("*") if p.is_file()
+            )
+            result.append((ts_dir.name, files))
+        return result
+
+    def restore_backup(self, timestamp: str) -> list[Path]:
+        """Restore all files from a backup snapshot.
+
+        Returns the list of restored file paths (relative to ROLAND/).
+        """
+        ts_dir = self._backup_dir / timestamp
+        if not ts_dir.exists():
+            raise FileNotFoundError(f"Backup '{timestamp}' not found")
+
+        restored = []
+        for backup_file in ts_dir.rglob("*"):
+            if not backup_file.is_file():
+                continue
+            rel = backup_file.relative_to(ts_dir)
+            dest = self.root / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(backup_file, dest)
+            restored.append(rel)
+        return restored
+
+    def prune_backups(self, keep: int = 5) -> int:
+        """Delete old backup snapshots, keeping the most recent N.
+
+        Returns the number of snapshots deleted.
+        """
+        if not self._backup_dir.exists():
+            return 0
+
+        snapshots = sorted(
+            (d for d in self._backup_dir.iterdir() if d.is_dir()),
+            reverse=True,
+        )
+        to_delete = snapshots[keep:]
+        for d in to_delete:
+            shutil.rmtree(d)
+        return len(to_delete)
+
     def memory_name(self, number: int) -> str:
         """Read the display name of a memory slot."""
         rc0 = self.parse_memory(number)

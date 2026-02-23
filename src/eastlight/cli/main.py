@@ -8,6 +8,8 @@ import click
 from rich.console import Console
 from rich.table import Table
 
+import yaml
+
 from eastlight.core.config import detect_device, load_config, resolve_roland_dir, save_config
 from eastlight.core.library import RC505Library
 from eastlight.core.model import Memory
@@ -47,6 +49,33 @@ def _open_memory(roland_dir: str, memory_num: int) -> tuple[RC505Library, Memory
     registry = _load_registry()
     rc0 = lib.parse_memory(memory_num)
     return lib, Memory(rc0, registry), registry
+
+
+def _validate_warn(schema, tag: str, value: int) -> None:
+    """Emit a CLI warning if value is outside schema-defined bounds."""
+    if schema is None:
+        return
+    fd = schema.fields.get(tag)
+    if fd is None:
+        return
+    if fd.choices and value not in fd.choices:
+        valid = ", ".join(f"{k}={v}" for k, v in fd.choices.items())
+        console.print(
+            f"[yellow]Warning:[/yellow] value {value} is not a valid choice "
+            f"for '{fd.display or fd.name}'. Valid: {valid}"
+        )
+    elif fd.type == "bool" and value not in (0, 1):
+        console.print(
+            f"[yellow]Warning:[/yellow] value {value} is not valid "
+            f"for boolean '{fd.display or fd.name}'. Expected 0 or 1."
+        )
+    elif fd.range is not None:
+        lo, hi = fd.range
+        if not lo <= value <= hi:
+            console.print(
+                f"[yellow]Warning:[/yellow] value {value} is outside range "
+                f"[{lo}, {hi}] for '{fd.display or fd.name}'"
+            )
 
 
 @click.group()
@@ -192,12 +221,14 @@ def parse(rc0_file: str) -> None:
 @click.argument("value", type=int)
 @click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
               default=None, help="ROLAND/ directory (default: config or auto-detect)")
+@click.option("--dry-run", "-n", is_flag=True, help="Show what would change without writing")
 def set_cmd(
     memory_num: int,
     section_name: str,
     param_name: str,
     value: int,
     roland_dir: str | None,
+    dry_run: bool,
 ) -> None:
     """Set a parameter value in a memory.
 
@@ -220,17 +251,27 @@ def set_cmd(
                 f"Parameter '{param_name}' not found in {section_name}."
             )
         old_value = resolved.get_by_tag(param_name)
-        resolved.set_by_tag(param_name, value)
         tag = param_name
+        _validate_warn(resolved.schema, param_name, value)
+        if not dry_run:
+            resolved.set_by_tag(param_name, value)
     else:
-        resolved.set_by_name(param_name, value)
         tag = resolved.schema.name_to_tag(param_name) if resolved.schema else param_name
+        _validate_warn(resolved.schema, tag, value)
+        if not dry_run:
+            resolved.set_by_name(param_name, value)
 
-    lib.save_memory(memory_num, mem.rc0)
-    console.print(
-        f"[green]Set[/green] {section_name}.{param_name} "
-        f"({tag}): {old_value} → {value}"
-    )
+    if dry_run:
+        console.print(
+            f"[dim](dry-run)[/dim] {section_name}.{param_name} "
+            f"({tag}): {old_value} → {value}"
+        )
+    else:
+        lib.save_memory(memory_num, mem.rc0)
+        console.print(
+            f"[green]Set[/green] {section_name}.{param_name} "
+            f"({tag}): {old_value} → {value}"
+        )
 
 
 @cli.command()
@@ -314,6 +355,52 @@ def swap(mem_a: int, mem_b: int, roland_dir: str | None) -> None:
     lib.swap_memories(mem_a, mem_b)
     console.print(
         f"[green]Swapped[/green] {mem_a:03d} ('{name_a}') ↔ {mem_b:03d} ('{name_b}')"
+    )
+
+
+@cli.command()
+@click.argument("memory_num", type=int)
+@click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
+              default=None, help="ROLAND/ directory (default: config or auto-detect)")
+@click.option("--force", is_flag=True, help="Skip confirmation prompt")
+@click.option("--dry-run", "-n", is_flag=True, help="Show what would be deleted without writing")
+def clear(memory_num: int, roland_dir: str | None, force: bool, dry_run: bool) -> None:
+    """Clear a memory slot (remove RC0 files and WAV audio).
+
+    Backs up the data before deleting. The device will show the slot as empty.
+
+    Example: eastlight clear 5
+    """
+    roland_dir = _resolve_dir(roland_dir)
+    lib = RC505Library(roland_dir)
+    slot = lib.memory_slot(memory_num)
+
+    if not slot.exists:
+        raise click.ClickException(f"Memory {memory_num:03d} does not exist.")
+
+    name = lib.memory_name(memory_num) or "(unnamed)"
+
+    if dry_run:
+        console.print(f"[dim](dry-run)[/dim] Would clear memory {memory_num:03d} ('{name}'):")
+        for v in ("A", "B"):
+            p = lib.data_dir / f"MEMORY{memory_num:03d}{v}.RC0"
+            if p.exists():
+                console.print(f"  delete {p.name}")
+        for t in range(1, 6):
+            w = lib.wave_dir / f"{memory_num:03d}_{t}" / f"{memory_num:03d}_{t}.WAV"
+            if w.exists():
+                console.print(f"  delete {w.parent.name}/{w.name}")
+        return
+
+    if not force:
+        if not click.confirm(
+            f"Clear memory {memory_num:03d} ('{name}')? This removes RC0 and WAV data."
+        ):
+            raise click.Abort()
+
+    lib.clear_memory(memory_num)
+    console.print(
+        f"[green]Cleared[/green] memory {memory_num:03d} ('{name}')"
     )
 
 
@@ -701,6 +788,7 @@ def fx_show(
 @click.argument("value", type=int)
 @click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
               default=None, help="ROLAND/ directory (default: config or auto-detect)")
+@click.option("--dry-run", "-n", is_flag=True, help="Show what would change without writing")
 def fx_set(
     memory_num: int,
     chain: str,
@@ -708,6 +796,7 @@ def fx_set(
     param_name: str,
     value: int,
     roland_dir: str | None,
+    dry_run: bool,
 ) -> None:
     """Set an FX parameter value.
 
@@ -749,18 +838,25 @@ def fx_set(
     if header_schema:
         header_tag = header_schema.name_to_tag(param_name)
         if header_tag is not None:
+            _validate_warn(header_schema, header_tag, value)
             old_value = header_section.get(header_tag)
-            header_section[header_tag] = value
-            lib.save_memory(memory_num, rc0)
             display = param_name
             if param_name == "fx_type":
                 old_name = fx_type_map.get(old_value, str(old_value))
                 new_name = fx_type_map.get(value, str(value))
                 display = f"fx_type ({old_name} → {new_name})"
-            console.print(
-                f"[green]Set[/green] {chain}.{subslot}.{display}: "
-                f"{old_value} → {value}"
-            )
+            if dry_run:
+                console.print(
+                    f"[dim](dry-run)[/dim] {chain}.{subslot}.{display}: "
+                    f"{old_value} → {value}"
+                )
+            else:
+                header_section[header_tag] = value
+                lib.save_memory(memory_num, rc0)
+                console.print(
+                    f"[green]Set[/green] {chain}.{subslot}.{display}: "
+                    f"{old_value} → {value}"
+                )
             return
 
     # Otherwise, set a parameter on the active effect
@@ -790,18 +886,204 @@ def fx_set(
                 f"Parameter '{param_name}' not found in {effect_section_name}."
             )
 
-    old_value = effect_section.get(tag)
-    effect_section[tag] = value
-    lib.save_memory(memory_num, rc0)
+    _validate_warn(effect_schema, tag, value)
 
+    old_value = effect_section.get(tag)
     display_name = param_name
     if effect_schema and tag != param_name:
         display_name = f"{param_name} ({tag})"
 
-    console.print(
-        f"[green]Set[/green] {chain}.{subslot}.{fx_name}.{display_name}: "
-        f"{old_value} → {value}"
-    )
+    if dry_run:
+        console.print(
+            f"[dim](dry-run)[/dim] {chain}.{subslot}.{fx_name}.{display_name}: "
+            f"{old_value} → {value}"
+        )
+    else:
+        effect_section[tag] = value
+        lib.save_memory(memory_num, rc0)
+        console.print(
+            f"[green]Set[/green] {chain}.{subslot}.{fx_name}.{display_name}: "
+            f"{old_value} → {value}"
+        )
+
+
+# --- System commands ---
+
+
+# System sections that are useful to display in a summary view
+_SYSTEM_KEY_SECTIONS = ["SETUP", "PREF", "COLOR", "USB", "MIDI"]
+
+
+@cli.command("sys-show")
+@click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
+              default=None, help="ROLAND/ directory (default: config or auto-detect)")
+@click.option("--section", "-s", help="Show only this section (e.g., SETUP, PREF, MIDI)")
+@click.option("--all", "show_all", is_flag=True, help="Show all sections including controllers")
+@click.option("--raw", is_flag=True, help="Show raw tag names instead of resolved names")
+@click.option("--variant", type=click.Choice(["1", "2"]), default="1",
+              help="System file variant (default: 1)")
+def sys_show(
+    roland_dir: str | None,
+    section: str | None,
+    show_all: bool,
+    raw: bool,
+    variant: str,
+) -> None:
+    """Show system settings.
+
+    By default shows key sections (SETUP, PREF, COLOR, USB, MIDI).
+    Use --all to include controller mappings (ICTL/ECTL) and
+    shared sections (INPUT, OUTPUT, ROUTING, MIXER, EQ, etc.).
+
+    Examples:
+
+    \b
+      eastlight sys-show
+      eastlight sys-show -s SETUP
+      eastlight sys-show --all
+      eastlight sys-show -s PREF --raw
+    """
+    roland_dir = _resolve_dir(roland_dir)
+    lib = RC505Library(roland_dir)
+    registry = _load_registry()
+    rc0 = lib.parse_system(int(variant))
+
+    sys_elem = rc0.sys
+    if sys_elem is None:
+        raise click.ClickException("No <sys> element in system file.")
+
+    console.print(f"[bold]System Settings[/bold] (SYSTEM{variant}.RC0)")
+    console.print()
+
+    if section:
+        sections_to_show = [section.upper()]
+    elif show_all:
+        sections_to_show = list(sys_elem.section_names)
+    else:
+        sections_to_show = [s for s in _SYSTEM_KEY_SECTIONS if s in sys_elem.section_names]
+
+    for sec_name in sections_to_show:
+        sec = sys_elem.sections.get(sec_name)
+        if sec is None:
+            continue
+
+        if not sec.fields:
+            continue
+
+        schema = registry.get(sec_name)
+
+        table = Table(title=sec_name, show_header=True)
+        table.add_column("Tag", style="dim", width=4)
+        table.add_column("Parameter", style="cyan", min_width=20)
+        table.add_column("Value", justify="right")
+        table.add_column("Display", style="green")
+
+        for tag, value in sec.fields.items():
+            if raw or schema is None:
+                param_name = tag
+                display_val = str(value)
+            else:
+                fd = schema.fields.get(tag)
+                if fd:
+                    param_name = fd.display or fd.name
+                    if fd.choices and value in fd.choices:
+                        display_val = fd.choices[value]
+                    elif fd.unit:
+                        display_val = f"{value} {fd.unit}"
+                    else:
+                        display_val = str(value)
+                else:
+                    param_name = tag
+                    display_val = str(value)
+
+            table.add_row(tag, param_name, str(value), display_val)
+
+        console.print(table)
+        console.print()
+
+
+@cli.command("sys-set")
+@click.argument("section_name")
+@click.argument("param_name")
+@click.argument("value", type=int)
+@click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
+              default=None, help="ROLAND/ directory (default: config or auto-detect)")
+@click.option("--variant", type=click.Choice(["1", "2"]), default="1",
+              help="System file variant (default: 1)")
+@click.option("--dry-run", "-n", is_flag=True, help="Show what would change without writing")
+def sys_set(
+    section_name: str,
+    param_name: str,
+    value: int,
+    roland_dir: str | None,
+    variant: str,
+    dry_run: bool,
+) -> None:
+    """Set a system parameter value.
+
+    SECTION_NAME is the section (e.g., SETUP, PREF, MIDI).
+    PARAM_NAME can be a schema name (e.g., 'contrast') or raw tag (e.g., 'D').
+
+    Examples:
+
+    \b
+      eastlight sys-set SETUP contrast 8
+      eastlight sys-set SETUP auto_off 2
+      eastlight sys-set PREF pref_eq 0
+      eastlight sys-set MIDI A 1
+    """
+    roland_dir = _resolve_dir(roland_dir)
+    lib = RC505Library(roland_dir)
+    registry = _load_registry()
+    var_int = int(variant)
+    rc0 = lib.parse_system(var_int)
+
+    sys_elem = rc0.sys
+    if sys_elem is None:
+        raise click.ClickException("No <sys> element in system file.")
+
+    section_name = section_name.upper()
+    sec = sys_elem.sections.get(section_name)
+    if sec is None:
+        raise click.ClickException(
+            f"Section '{section_name}' not found in SYSTEM{variant}.RC0. "
+            f"Use 'eastlight sys-show --all' to see available sections."
+        )
+
+    schema = registry.get(section_name)
+
+    # Resolve param_name to tag
+    tag = None
+    if schema:
+        tag = schema.name_to_tag(param_name)
+
+    if tag is None:
+        if param_name in sec.fields:
+            tag = param_name
+        else:
+            raise click.ClickException(
+                f"Parameter '{param_name}' not found in {section_name}."
+            )
+
+    _validate_warn(schema, tag, value)
+
+    old_value = sec.get(tag)
+    display_name = param_name
+    if schema and tag != param_name:
+        display_name = f"{param_name} ({tag})"
+
+    if dry_run:
+        console.print(
+            f"[dim](dry-run)[/dim] SYSTEM{variant}.{section_name}.{display_name}: "
+            f"{old_value} → {value}"
+        )
+    else:
+        sec[tag] = value
+        lib.save_system(rc0, var_int)
+        console.print(
+            f"[green]Set[/green] SYSTEM{variant}.{section_name}.{display_name}: "
+            f"{old_value} → {value}"
+        )
 
 
 # --- Device & config commands ---
@@ -883,6 +1165,522 @@ def config(set_dir: str | None, backup: bool | None, show: bool) -> None:
         console.print("  Recent:")
         for r in cfg.recent:
             console.print(f"    {r}")
+
+
+# --- Controller mapping commands ---
+
+
+@cli.command("ctl-show")
+@click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
+              default=None, help="ROLAND/ directory (default: config or auto-detect)")
+@click.option("--variant", type=click.Choice(["1", "2"]), default="1",
+              help="System file variant (default: 1)")
+@click.option("--type", "ctl_type", type=click.Choice(["ictl", "ectl", "all"]),
+              default="all", help="Show only internal (ictl) or external (ectl) controllers")
+@click.option("--raw", is_flag=True, help="Show raw tag names")
+def ctl_show(
+    roland_dir: str | None,
+    variant: str,
+    ctl_type: str,
+    raw: bool,
+) -> None:
+    """Show MIDI controller assignments.
+
+    Internal controllers (ICTL) are the panel buttons and pedal inputs.
+    External controllers (ECTL) are MIDI CC inputs (CTL1-4, EXP1-2).
+
+    Examples:
+
+    \b
+      eastlight ctl-show
+      eastlight ctl-show --type ictl
+      eastlight ctl-show --type ectl
+    """
+    roland_dir = _resolve_dir(roland_dir)
+    lib = RC505Library(roland_dir)
+    registry = _load_registry()
+    rc0 = lib.parse_system(int(variant))
+
+    sys_elem = rc0.sys
+    if sys_elem is None:
+        raise click.ClickException("No <sys> element in system file.")
+
+    show_ictl = ctl_type in ("ictl", "all")
+    show_ectl = ctl_type in ("ectl", "all")
+
+    if show_ictl:
+        console.print(f"[bold]Internal Controllers[/bold] (SYSTEM{variant}.RC0)")
+        console.print()
+        _show_ctl_sections(sys_elem, registry, "ICTL", raw)
+
+    if show_ectl:
+        console.print(f"[bold]External Controllers[/bold] (SYSTEM{variant}.RC0)")
+        console.print()
+        _show_ctl_sections(sys_elem, registry, "ECTL", raw)
+
+
+def _show_ctl_sections(sys_elem, registry, prefix: str, raw: bool) -> None:
+    """Display controller sections matching a prefix."""
+    table = Table(show_header=True)
+    table.add_column("Section", style="cyan", min_width=24)
+    table.add_column("Tag", style="dim", width=4)
+    table.add_column("Parameter", min_width=16)
+    table.add_column("Value", justify="right")
+    table.add_column("Display", style="green")
+
+    found = False
+    for sec_name in sys_elem.section_names:
+        if not sec_name.startswith(prefix):
+            continue
+
+        sec = sys_elem.sections.get(sec_name)
+        if sec is None or not sec.fields:
+            continue
+
+        schema = registry.get(sec_name)
+        found = True
+
+        for tag, value in sec.fields.items():
+            if raw or schema is None:
+                param_name = tag
+                display_val = str(value)
+            else:
+                fd = schema.fields.get(tag)
+                if fd:
+                    param_name = fd.display or fd.name
+                    if fd.choices and value in fd.choices:
+                        display_val = fd.choices[value]
+                    else:
+                        display_val = str(value)
+                else:
+                    param_name = tag
+                    display_val = str(value)
+
+            table.add_row(sec_name, tag, param_name, str(value), display_val)
+
+    if found:
+        console.print(table)
+        console.print()
+    else:
+        console.print(f"[dim]No {prefix} sections found.[/dim]")
+
+
+@cli.command("ctl-set")
+@click.argument("section_name")
+@click.argument("param_name")
+@click.argument("value", type=int)
+@click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
+              default=None, help="ROLAND/ directory (default: config or auto-detect)")
+@click.option("--variant", type=click.Choice(["1", "2"]), default="1",
+              help="System file variant (default: 1)")
+@click.option("--dry-run", "-n", is_flag=True, help="Show what would change without writing")
+def ctl_set(
+    section_name: str,
+    param_name: str,
+    value: int,
+    roland_dir: str | None,
+    variant: str,
+    dry_run: bool,
+) -> None:
+    """Set a MIDI controller assignment.
+
+    SECTION_NAME is the controller section (e.g., ICTL1_TRACK1_FX, ECTL_CTL1).
+    PARAM_NAME is a schema name (e.g., ctl_func) or raw tag (A, B, C, D).
+
+    Examples:
+
+    \b
+      eastlight ctl-set ICTL1_TRACK1_FX ctl_func 42
+      eastlight ctl-set ECTL_CTL1 ctl_func 10
+      eastlight ctl-set ECTL_EXP1 ctl_range 64
+      eastlight ctl-set ICTL1_PEDAL1 ctl_mode 0
+    """
+    roland_dir = _resolve_dir(roland_dir)
+    lib = RC505Library(roland_dir)
+    registry = _load_registry()
+    var_int = int(variant)
+    rc0 = lib.parse_system(var_int)
+
+    sys_elem = rc0.sys
+    if sys_elem is None:
+        raise click.ClickException("No <sys> element in system file.")
+
+    section_name = section_name.upper()
+    sec = sys_elem.sections.get(section_name)
+    if sec is None:
+        raise click.ClickException(
+            f"Section '{section_name}' not found. "
+            f"Use 'eastlight ctl-show' to see available controller sections."
+        )
+
+    schema = registry.get(section_name)
+
+    tag = None
+    if schema:
+        tag = schema.name_to_tag(param_name)
+    if tag is None:
+        if param_name in sec.fields:
+            tag = param_name
+        else:
+            raise click.ClickException(
+                f"Parameter '{param_name}' not found in {section_name}."
+            )
+
+    _validate_warn(schema, tag, value)
+
+    old_value = sec.get(tag)
+    display_name = param_name
+    if schema and tag != param_name:
+        display_name = f"{param_name} ({tag})"
+
+    if dry_run:
+        console.print(
+            f"[dim](dry-run)[/dim] {section_name}.{display_name}: "
+            f"{old_value} → {value}"
+        )
+    else:
+        sec[tag] = value
+        lib.save_system(rc0, var_int)
+        console.print(
+            f"[green]Set[/green] {section_name}.{display_name}: "
+            f"{old_value} → {value}"
+        )
+
+
+# --- Backup management commands ---
+
+
+@cli.group()
+def backup() -> None:
+    """Manage automatic backups (list, restore, prune)."""
+
+
+@backup.command("list")
+@click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
+              default=None, help="ROLAND/ directory (default: config or auto-detect)")
+def backup_list(roland_dir: str | None) -> None:
+    """List all backup snapshots.
+
+    Shows timestamped backup snapshots with their files, newest first.
+    """
+    roland_dir = _resolve_dir(roland_dir)
+    lib = RC505Library(roland_dir)
+    snapshots = lib.list_backups()
+
+    if not snapshots:
+        console.print("[dim]No backups found.[/dim]")
+        return
+
+    table = Table(title="Backup Snapshots")
+    table.add_column("#", style="cyan", justify="right", width=4)
+    table.add_column("Timestamp", style="bold")
+    table.add_column("Files", justify="right")
+
+    for i, (ts, files) in enumerate(snapshots, 1):
+        table.add_row(str(i), ts, str(len(files)))
+
+    console.print(table)
+    console.print(f"\n[dim]{len(snapshots)} snapshot(s)[/dim]")
+
+
+@backup.command("show")
+@click.argument("timestamp")
+@click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
+              default=None, help="ROLAND/ directory (default: config or auto-detect)")
+def backup_show(timestamp: str, roland_dir: str | None) -> None:
+    """Show files in a backup snapshot.
+
+    TIMESTAMP is the snapshot identifier (from 'backup list').
+    """
+    roland_dir = _resolve_dir(roland_dir)
+    lib = RC505Library(roland_dir)
+    snapshots = lib.list_backups()
+
+    found = None
+    for ts, files in snapshots:
+        if ts == timestamp:
+            found = (ts, files)
+            break
+
+    if found is None:
+        raise click.ClickException(f"Backup '{timestamp}' not found.")
+
+    ts, files = found
+    console.print(f"[bold]Backup {ts}[/bold] — {len(files)} file(s):")
+    for f in files:
+        console.print(f"  {f}")
+
+
+@backup.command("restore")
+@click.argument("timestamp")
+@click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
+              default=None, help="ROLAND/ directory (default: config or auto-detect)")
+@click.option("--force", is_flag=True, help="Skip confirmation prompt")
+def backup_restore(timestamp: str, roland_dir: str | None, force: bool) -> None:
+    """Restore all files from a backup snapshot.
+
+    TIMESTAMP is the snapshot identifier (from 'backup list').
+    Overwrites current files with the backed-up versions.
+    """
+    roland_dir = _resolve_dir(roland_dir)
+    lib = RC505Library(roland_dir)
+
+    if not force:
+        if not click.confirm(
+            f"Restore backup '{timestamp}'? This will overwrite current files."
+        ):
+            raise click.Abort()
+
+    try:
+        restored = lib.restore_backup(timestamp)
+    except FileNotFoundError as e:
+        raise click.ClickException(str(e))
+
+    for rel in restored:
+        console.print(f"  [green]Restored[/green] {rel}")
+    console.print(f"\n[green]Restored[/green] {len(restored)} file(s) from {timestamp}")
+
+
+@backup.command("prune")
+@click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
+              default=None, help="ROLAND/ directory (default: config or auto-detect)")
+@click.option("--keep", "-k", type=int, default=5, show_default=True,
+              help="Number of most recent snapshots to keep")
+def backup_prune(roland_dir: str | None, keep: int) -> None:
+    """Delete old backup snapshots, keeping the most recent N.
+
+    Example: eastlight backup prune --keep 3
+    """
+    roland_dir = _resolve_dir(roland_dir)
+    lib = RC505Library(roland_dir)
+    deleted = lib.prune_backups(keep=keep)
+
+    if deleted == 0:
+        console.print("[dim]Nothing to prune.[/dim]")
+    else:
+        console.print(
+            f"[green]Pruned[/green] {deleted} old snapshot(s), kept {keep} most recent"
+        )
+
+
+# --- Batch operation commands ---
+
+
+@cli.command("template-export")
+@click.argument("memory_num", type=int)
+@click.argument("output", type=click.Path(dir_okay=False))
+@click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
+              default=None, help="ROLAND/ directory (default: config or auto-detect)")
+@click.option("--section", "-s", multiple=True,
+              help="Export only these sections (can repeat). Default: all.")
+def template_export(
+    memory_num: int,
+    output: str,
+    roland_dir: str | None,
+    section: tuple[str, ...],
+) -> None:
+    """Export a memory's parameters as a YAML template.
+
+    Templates contain parameter values (no audio) and can be applied
+    to other memories with 'template-apply'. Useful for copying settings
+    like effects, track config, or master settings across memories.
+
+    Examples:
+
+    \b
+      eastlight template-export 1 my_settings.yaml
+      eastlight template-export 1 fx_only.yaml -s TRACK1 -s MASTER
+    """
+    roland_dir = _resolve_dir(roland_dir)
+    _, mem, _ = _open_memory(roland_dir, memory_num)
+
+    sections_to_export = list(section) if section else mem.section_names
+    template: dict = {"_source": f"memory {memory_num:03d}", "_sections": {}}
+
+    for sec_name in sections_to_export:
+        resolved = mem.section(sec_name)
+        if resolved is None:
+            continue
+        template["_sections"][sec_name] = dict(resolved.raw.fields)
+
+    out_path = Path(output)
+    with open(out_path, "w") as f:
+        yaml.dump(template, f, default_flow_style=False, sort_keys=False)
+
+    n = len(template["_sections"])
+    console.print(
+        f"[green]Exported[/green] {n} section(s) from memory {memory_num:03d} → {out_path.name}"
+    )
+
+
+@cli.command("template-apply")
+@click.argument("template_file", type=click.Path(exists=True, dir_okay=False))
+@click.argument("memory_nums", type=str)
+@click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
+              default=None, help="ROLAND/ directory (default: config or auto-detect)")
+@click.option("--section", "-s", multiple=True,
+              help="Apply only these sections from the template (can repeat)")
+@click.option("--dry-run", "-n", is_flag=True, help="Show what would change without writing")
+def template_apply(
+    template_file: str,
+    memory_nums: str,
+    roland_dir: str | None,
+    section: tuple[str, ...],
+    dry_run: bool,
+) -> None:
+    """Apply a YAML template to one or more memories.
+
+    MEMORY_NUMS is a comma-separated list or range: "1,2,3" or "1-5" or "1-3,7,10-12".
+
+    Examples:
+
+    \b
+      eastlight template-apply my_settings.yaml 5
+      eastlight template-apply fx_only.yaml 1-10
+      eastlight template-apply settings.yaml 1,3,5,7
+    """
+    roland_dir = _resolve_dir(roland_dir)
+    lib = RC505Library(roland_dir)
+    registry = _load_registry()
+
+    with open(template_file) as f:
+        template = yaml.safe_load(f)
+
+    sections_data = template.get("_sections", {})
+    if not sections_data:
+        raise click.ClickException("Template contains no sections.")
+
+    # Filter sections if requested
+    if section:
+        sections_data = {k: v for k, v in sections_data.items() if k in section}
+
+    # Parse memory number ranges
+    targets = _parse_memory_range(memory_nums)
+
+    applied = 0
+    for num in targets:
+        slot = lib.memory_slot(num)
+        if not slot.exists:
+            console.print(f"[yellow]Warning:[/yellow] memory {num:03d} does not exist, skipping")
+            continue
+
+        rc0 = lib.parse_memory(num)
+        mem = Memory(rc0, registry)
+
+        for sec_name, fields in sections_data.items():
+            resolved = mem.section(sec_name)
+            if resolved is None:
+                continue
+            for tag, value in fields.items():
+                if tag in resolved.raw.fields:
+                    resolved.raw[tag] = value
+
+        if not dry_run:
+            lib.save_memory(num, rc0)
+        applied += 1
+
+    label = "[dim](dry-run)[/dim]" if dry_run else "[green]Applied[/green]"
+    console.print(
+        f"{label} template ({len(sections_data)} section(s)) "
+        f"to {applied} memory slot(s)"
+    )
+
+
+@cli.command("bulk-set")
+@click.argument("memory_nums", type=str)
+@click.argument("section_name")
+@click.argument("param_name")
+@click.argument("value", type=int)
+@click.option("--dir", "-d", "roland_dir", type=click.Path(file_okay=False),
+              default=None, help="ROLAND/ directory (default: config or auto-detect)")
+@click.option("--dry-run", "-n", is_flag=True, help="Show what would change without writing")
+def bulk_set(
+    memory_nums: str,
+    section_name: str,
+    param_name: str,
+    value: int,
+    roland_dir: str | None,
+    dry_run: bool,
+) -> None:
+    """Set a parameter across multiple memories at once.
+
+    MEMORY_NUMS is a comma-separated list or range: "1,2,3" or "1-5" or "1-3,7,10-12".
+
+    Examples:
+
+    \b
+      eastlight bulk-set 1-10 MASTER play_level 100
+      eastlight bulk-set 1,3,5 TRACK1 pan 50
+    """
+    roland_dir = _resolve_dir(roland_dir)
+    lib = RC505Library(roland_dir)
+    registry = _load_registry()
+
+    targets = _parse_memory_range(memory_nums)
+
+    schema = registry.get(section_name)
+
+    tag = None
+    if schema:
+        tag = schema.name_to_tag(param_name)
+    if tag is None:
+        tag = param_name
+
+    _validate_warn(schema, tag, value)
+
+    updated = 0
+    for num in targets:
+        slot = lib.memory_slot(num)
+        if not slot.exists:
+            continue
+
+        rc0 = lib.parse_memory(num)
+        mem = Memory(rc0, registry)
+        resolved = mem.section(section_name)
+        if resolved is None:
+            continue
+
+        if tag in resolved.raw.fields:
+            old = resolved.raw.get(tag)
+            if dry_run:
+                console.print(
+                    f"  [dim](dry-run)[/dim] {num:03d}.{section_name}.{param_name}: "
+                    f"{old} → {value}"
+                )
+            else:
+                resolved.raw[tag] = value
+                lib.save_memory(num, rc0)
+            updated += 1
+
+    label = "[dim](dry-run)[/dim]" if dry_run else "[green]Set[/green]"
+    console.print(
+        f"{label} {section_name}.{param_name} = {value} "
+        f"across {updated} memory slot(s)"
+    )
+
+
+def _parse_memory_range(spec: str) -> list[int]:
+    """Parse a memory range spec like '1-5', '1,3,5', or '1-3,7,10-12'.
+
+    Returns a sorted list of unique memory numbers (1-99).
+    """
+    result = set()
+    for part in spec.split(","):
+        part = part.strip()
+        if "-" in part:
+            start, end = part.split("-", 1)
+            start, end = int(start), int(end)
+            if not (1 <= start <= 99 and 1 <= end <= 99):
+                raise click.ClickException(
+                    f"Memory numbers must be 1-99, got range {start}-{end}"
+                )
+            result.update(range(start, end + 1))
+        else:
+            num = int(part)
+            if not 1 <= num <= 99:
+                raise click.ClickException(f"Memory number must be 1-99, got {num}")
+            result.add(num)
+    return sorted(result)
 
 
 if __name__ == "__main__":

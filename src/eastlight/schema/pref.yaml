@@ -114,3 +114,51 @@ fields:
     choices:
       0: "SYSTEM"
       1: "MEMORY"
+  O:
+    name: pref_unknown_o
+    type: enum
+    default: 1
+    display: "Pref O"
+    choices:
+      0: "SYSTEM"
+      1: "MEMORY"
+  P:
+    name: pref_unknown_p
+    type: enum
+    default: 1
+    display: "Pref P"
+    choices:
+      0: "SYSTEM"
+      1: "MEMORY"
+  Q:
+    name: pref_unknown_q
+    type: enum
+    default: 1
+    display: "Pref Q"
+    choices:
+      0: "SYSTEM"
+      1: "MEMORY"
+  R:
+    name: pref_unknown_r
+    type: enum
+    default: 1
+    display: "Pref R"
+    choices:
+      0: "SYSTEM"
+      1: "MEMORY"
+  S:
+    name: pref_unknown_s
+    type: enum
+    default: 1
+    display: "Pref S"
+    choices:
+      0: "SYSTEM"
+      1: "MEMORY"
+  T:
+    name: pref_unknown_t
+    type: enum
+    default: 1
+    display: "Pref T"
+    choices:
+      0: "SYSTEM"
+      1: "MEMORY"

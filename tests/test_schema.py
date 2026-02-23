@@ -109,7 +109,7 @@ class TestSchemaRegistry:
             "OUTPUT": 4, "ROUTING": 19, "MIXER": 22, "EQ": 12,
             "MASTER_FX": 3, "FX_SETUP": 1, "FX_SLOT": 3, "FIXED_VALUE": 2,
             "ICTL": 3, "ECTL": 4, "SETUP": 22, "COLOR": 5,
-            "USB": 5, "MIDI": 10, "PREF": 14, "FX_SUBSLOT": 4,
+            "USB": 5, "MIDI": 10, "PREF": 20, "FX_SUBSLOT": 4,
         }
         for section_type, count in expected.items():
             schema = registry.get(section_type)
